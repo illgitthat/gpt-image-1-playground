@@ -1,11 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import OpenAI, { AzureOpenAI } from 'openai'; // Import AzureOpenAI
 import fs from 'fs/promises';
 import path from 'path';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Determine which client to use based on environment variables
+let apiClient: OpenAI | AzureOpenAI;
+const useAzure = process.env.AZURE_OPENAI_API_KEY && process.env.AZURE_OPENAI_ENDPOINT && process.env.AZURE_OPENAI_DEPLOYMENT_NAME && process.env.AZURE_OPENAI_API_VERSION;
+
+if (useAzure) {
+  console.log('Initializing Azure OpenAI client...');
+  apiClient = new AzureOpenAI({
+    apiKey: process.env.AZURE_OPENAI_API_KEY!,
+    endpoint: process.env.AZURE_OPENAI_ENDPOINT!,
+    apiVersion: process.env.AZURE_OPENAI_API_VERSION!,
+  });
+  console.log('Azure OpenAI client initialized.');
+} else if (process.env.OPENAI_API_KEY) {
+  console.log('Initializing standard OpenAI client...');
+  apiClient = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+  console.log('Standard OpenAI client initialized.');
+} else {
+  console.error('FATAL: No OpenAI or Azure OpenAI API keys found in environment variables.');
+}
 
 const outputDir = path.resolve(process.cwd(), 'generated-images');
 
@@ -31,10 +49,25 @@ async function ensureOutputDirExists() {
 export async function POST(request: NextRequest) {
   console.log('Received POST request to /api/images');
 
-  if (!process.env.OPENAI_API_KEY) {
+  if (!apiClient) {
+    console.error('API client is not initialized. Check API key configuration.');
+    return NextResponse.json(
+      { error: 'Server configuration error: API client not initialized.' },
+      { status: 500 }
+    );
+  }
+
+  if (!useAzure && !process.env.OPENAI_API_KEY) {
     console.error('OPENAI_API_KEY is not set.');
     return NextResponse.json(
-      { error: 'Server configuration error: API key not found.' },
+      { error: 'Server configuration error: OpenAI API key not found.' },
+      { status: 500 }
+    );
+  }
+  if (useAzure && !process.env.AZURE_OPENAI_API_KEY) {
+    console.error('AZURE_OPENAI_API_KEY is not set.');
+    return NextResponse.json(
+      { error: 'Server configuration error: Azure OpenAI API key not found.' },
       { status: 500 }
     );
   }
@@ -56,7 +89,7 @@ export async function POST(request: NextRequest) {
     }
 
     let result: OpenAI.Images.ImagesResponse;
-    const model = 'gpt-image-1';
+    const model = useAzure ? process.env.AZURE_OPENAI_DEPLOYMENT_NAME! : 'gpt-image-1';
 
     if (mode === 'generate') {
       const n = parseInt(formData.get('n') as string || '1', 10);
@@ -70,7 +103,7 @@ export async function POST(request: NextRequest) {
       const params: OpenAI.Images.ImageGenerateParams = {
         model,
         prompt,
-        n: Math.max(1, Math.min(n || 1, 10)), 
+        n: Math.max(1, Math.min(n || 1, 10)),
         size,
         quality,
         output_format,
@@ -79,21 +112,20 @@ export async function POST(request: NextRequest) {
       };
 
       if ((output_format === 'jpeg' || output_format === 'webp') && output_compression_str) {
-         const compression = parseInt(output_compression_str, 10);
-         if (!isNaN(compression) && compression >= 0 && compression <= 100) {
-            params.output_compression = compression;
-         }
+        const compression = parseInt(output_compression_str, 10);
+        if (!isNaN(compression) && compression >= 0 && compression <= 100) {
+          params.output_compression = compression;
+        }
       }
 
-      console.log('Calling OpenAI generate with params:', params);
-      result = await openai.images.generate(params);
+      console.log(`Calling ${useAzure ? 'Azure ' : ''}OpenAI generate with params:`, params);
+      result = await apiClient.images.generate(params);
 
     } else if (mode === 'edit') {
       const n = parseInt(formData.get('n') as string || '1', 10);
       const size = formData.get('size') as OpenAI.Images.ImageEditParams['size'] || 'auto';
       const quality = formData.get('quality') as OpenAI.Images.ImageEditParams['quality'] || 'auto';
 
-      
       const imageFiles: File[] = [];
       for (const [key, value] of formData.entries()) {
         if (key.startsWith('image_') && value instanceof File) {
@@ -112,20 +144,20 @@ export async function POST(request: NextRequest) {
         prompt,
         image: imageFiles,
         n: Math.max(1, Math.min(n || 1, 10)),
-        size: size === 'auto' ? undefined : size, 
-        quality: quality === 'auto' ? undefined : quality, 
+        size: size === 'auto' ? undefined : size,
+        quality: quality === 'auto' ? undefined : quality,
       };
 
       if (maskFile) {
         params.mask = maskFile;
       }
 
-      console.log('Calling OpenAI edit with params:', {
-          ...params,
-          image: `[${imageFiles.map(f => f.name).join(', ')}]`, 
-          mask: maskFile ? maskFile.name : 'N/A'
+      console.log(`Calling ${useAzure ? 'Azure ' : ''}OpenAI edit with params:`, {
+        ...params,
+        image: `[${imageFiles.map(f => f.name).join(', ')}]`,
+        mask: maskFile ? maskFile.name : 'N/A'
       });
-      result = await openai.images.edit(params);
+      result = await apiClient.images.edit(params);
 
     } else {
       return NextResponse.json({ error: 'Invalid mode specified' }, { status: 400 });
@@ -133,7 +165,6 @@ export async function POST(request: NextRequest) {
 
     console.log('OpenAI API call successful.');
 
-    
     if (!result || !Array.isArray(result.data) || result.data.length === 0) {
       console.error('Invalid or empty data received from OpenAI API:', result);
       return NextResponse.json(
@@ -150,7 +181,7 @@ export async function POST(request: NextRequest) {
         }
         const buffer = Buffer.from(imageData.b64_json, 'base64');
         const timestamp = Date.now();
-        
+
         const fileExtension = formData.get('output_format') as string || 'png';
         const filename = `${timestamp}-${index}.${fileExtension}`;
         const filepath = path.join(outputDir, filename);
@@ -161,14 +192,14 @@ export async function POST(request: NextRequest) {
 
         return {
           b64_json: imageData.b64_json,
-          path: `/generated-images/${filename}`, 
+          path: `/generated-images/${filename}`,
           filename: filename,
         };
       })
     );
 
     console.log('All images processed and saved.');
-    
+
     return NextResponse.json({ images: savedImagesData, usage: result.usage });
 
   } catch (error: unknown) {
@@ -183,12 +214,12 @@ export async function POST(request: NextRequest) {
         status = error.status;
       }
     } else if (typeof error === 'object' && error !== null) {
-        if ('message' in error && typeof error.message === 'string') {
-            errorMessage = error.message;
-        }
-        if ('status' in error && typeof error.status === 'number') {
-            status = error.status;
-        }
+      if ('message' in error && typeof error.message === 'string') {
+        errorMessage = error.message;
+      }
+      if ('status' in error && typeof error.status === 'number') {
+        status = error.status;
+      }
     }
 
     return NextResponse.json({ error: errorMessage }, { status });

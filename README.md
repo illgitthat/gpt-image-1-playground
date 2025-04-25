@@ -48,16 +48,37 @@ Follow these steps to get the playground running locally.
 
 ### 1. Set Up API Key
 
-You need an OpenAI API key to use this application.
+You need an API key to use this application. You can configure it to use either a standard OpenAI API key or an Azure OpenAI deployment.
 
-1.  If you don't have a `.env.local` file, create one.
+**Option 1: Standard OpenAI API Key**
+
+1.  If you don't have a `.env.local` file in the project root, create one.
 2.  Add your OpenAI API key to the `.env.local` file:
 
     ```dotenv
+    # .env.local
     OPENAI_API_KEY=your_openai_api_key_here
     ```
 
-    **Important:** Keep your API key secret. The `.env.local` file is included in `.gitignore` by default to prevent accidental commits.
+**Option 2: Azure OpenAI Service**
+
+1.  Ensure you have an Azure OpenAI resource and a model deployment (e.g., for `gpt-image-1`).
+2.  If you don't have a `.env.local` file in the project root, create one.
+3.  Add your Azure OpenAI credentials and deployment details to the `.env.local` file:
+
+    ```dotenv
+    # .env.local
+    AZURE_OPENAI_API_KEY=your_azure_api_key
+    AZURE_OPENAI_ENDPOINT=your_azure_endpoint # e.g., https://your-resource-name.openai.azure.com/
+    AZURE_OPENAI_DEPLOYMENT_NAME=your_deployment_name # The name you gave your model deployment
+    AZURE_OPENAI_API_VERSION=your_api_version # e.g., 2025-04-01-preview
+    ```
+
+**How it Works:**
+
+The application will automatically detect if the Azure environment variables (`AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT_NAME`, `AZURE_OPENAI_API_VERSION`) are set in `.env.local`. If they are, it will use the Azure OpenAI client. Otherwise, it will fall back to using the standard OpenAI client if `OPENAI_API_KEY` is set.
+
+**Important:** Keep your API keys and endpoint information secret. The `.env.local` file is included in `.gitignore` by default to prevent accidental commits.
 
 ### 2. Install Dependencies
 
