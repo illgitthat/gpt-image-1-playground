@@ -13,6 +13,7 @@ if (useAzure) {
     apiKey: process.env.AZURE_OPENAI_API_KEY!,
     endpoint: process.env.AZURE_OPENAI_ENDPOINT!,
     apiVersion: process.env.AZURE_OPENAI_API_VERSION!,
+    deployment: process.env.AZURE_OPENAI_DEPLOYMENT_NAME!,
   });
   console.log('Azure OpenAI client initialized.');
 } else if (process.env.OPENAI_API_KEY) {
@@ -23,6 +24,73 @@ if (useAzure) {
   console.log('Standard OpenAI client initialized.');
 } else {
   console.error('FATAL: No OpenAI or Azure OpenAI API keys found in environment variables.');
+}
+
+// Manual Azure OpenAI image edit function for direct fetch (workaround)
+async function azureOpenAIImageEdit(params: OpenAI.Images.ImageEditParams): Promise<OpenAI.Images.ImagesResponse> {
+  console.log('Using manual fetch for Azure OpenAI image edit');
+
+  const endpoint = process.env.AZURE_OPENAI_ENDPOINT!.replace(/\/$/, '');
+  const editUrl = `${endpoint}/openai/deployments/${process.env.AZURE_OPENAI_DEPLOYMENT_NAME}/images/edits?api-version=${process.env.AZURE_OPENAI_API_VERSION}`;
+
+  // Create a new FormData object for the fetch request
+  const formData = new FormData();
+
+  // Add the prompt
+  formData.append('prompt', params.prompt);
+
+  // Add all images (ensure they are properly processed as files)
+  if (Array.isArray(params.image)) {
+    // For File objects, we can append them directly
+    for (let i = 0; i < params.image.length; i++) {
+      const image = params.image[i];
+      // File objects from FormData already implement the Blob interface
+      if (image instanceof File) {
+        formData.append('image', image);
+      }
+    }
+  } else if (params.image instanceof File) {
+    // Single file case
+    formData.append('image', params.image);
+  }
+
+  // Add mask if available
+  if (params.mask && params.mask instanceof File) {
+    formData.append('mask', params.mask);
+  }
+
+  // Add other parameters
+  if (params.n) {
+    formData.append('n', params.n.toString());
+  }
+  if (params.size) {
+    formData.append('size', params.size);
+  }
+  if (params.quality) {
+    formData.append('quality', params.quality);
+  }
+
+  try {
+    const response = await fetch(editUrl, {
+      method: 'POST',
+      headers: {
+        'api-key': process.env.AZURE_OPENAI_API_KEY!,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null);
+      console.error('Azure OpenAI edit request failed:', response.status, errorData);
+      throw new Error(`Azure OpenAI API error: ${response.status} ${response.statusText} ${errorData ? JSON.stringify(errorData) : ''}`);
+    }
+
+    const result = await response.json();
+    return result as OpenAI.Images.ImagesResponse;
+  } catch (error) {
+    console.error('Error in manual Azure OpenAI image edit:', error);
+    throw error;
+  }
 }
 
 const outputDir = path.resolve(process.cwd(), 'generated-images');
@@ -157,8 +225,14 @@ export async function POST(request: NextRequest) {
         image: `[${imageFiles.map(f => f.name).join(', ')}]`,
         mask: maskFile ? maskFile.name : 'N/A'
       });
-      result = await apiClient.images.edit(params);
 
+      if (useAzure) {
+        // For Azure, use our manual fetch workaround
+        result = await azureOpenAIImageEdit(params);
+      } else {
+        // For regular OpenAI, use the SDK
+        result = await apiClient.images.edit(params);
+      }
     } else {
       return NextResponse.json({ error: 'Invalid mode specified' }, { status: 400 });
     }
