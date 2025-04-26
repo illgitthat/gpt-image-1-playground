@@ -114,7 +114,85 @@ export function EditingForm({
     setEditMaskPreviewUrl
 }: EditingFormProps) {
   const [firstImagePreviewUrl, setFirstImagePreviewUrl] = React.useState<string | null>(null);
+  const [isDragging, setIsDragging] = React.useState(false);
+  const dropZoneRef = React.useRef<HTMLLabelElement>(null);
 
+  // Event handlers for drag and drop
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget === dropZoneRef.current) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const processFiles = (files: File[]) => {
+    const totalFiles = imageFiles.length + files.length;
+    if (totalFiles > maxImages) {
+      alert(`You can only select up to ${maxImages} images.`);
+      files = files.slice(0, maxImages - imageFiles.length);
+      if (files.length === 0) return;
+    }
+
+    const validFiles = files.filter(file =>
+      file.type === 'image/png' ||
+      file.type === 'image/jpeg' ||
+      file.type === 'image/webp'
+    );
+
+    if (validFiles.length === 0) return;
+
+    setImageFiles(prevFiles => [...prevFiles, ...validFiles]);
+
+    const filePromises = validFiles.map(file => {
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(filePromises)
+      .then(newUrls => {
+        setSourceImagePreviewUrls(prevUrls => [...prevUrls, ...newUrls]);
+      })
+      .catch(error => {
+        console.error("Error reading image files:", error);
+      });
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    processFiles(droppedFiles);
+  };
+
+  // Handle clipboard paste
+  React.useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      if (!e.clipboardData?.files.length) return;
+      const pastedFiles = Array.from(e.clipboardData.files);
+      processFiles(pastedFiles);
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [imageFiles.length]);
 
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const visualFeedbackCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
@@ -455,8 +533,15 @@ export function EditingForm({
           <div className="space-y-2">
             <Label className="text-white">Source Image(s) [Max: 10]</Label>
             <Label
+                ref={dropZoneRef}
                 htmlFor="image-files-input"
-                className="flex items-center justify-between w-full h-10 px-3 py-2 text-sm border border-white/20 rounded-md cursor-pointer bg-black hover:bg-white/5 transition-colors"
+                className={`flex items-center justify-between w-full h-10 px-3 py-2 text-sm border rounded-md cursor-pointer bg-black transition-colors ${
+                  isDragging ? 'border-white/50 bg-white/10' : 'border-white/20 hover:bg-white/5'
+                }`}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
             >
                 <span className="text-white/60 truncate pr-2">
                     {displayFileNames(imageFiles)}
@@ -481,10 +566,10 @@ export function EditingForm({
                             <Image
                                 src={url}
                                 alt={`Source preview ${index + 1}`}
-                                width={80} 
-                                height={80} 
+                                width={80}
+                                height={80}
                                 className="object-cover rounded border border-white/10"
-                                unoptimized 
+                                unoptimized
                              />
                              <Button
                                 type="button"
@@ -524,10 +609,10 @@ export function EditingForm({
                         <Image
                             src={firstImagePreviewUrl}
                             alt="Image preview for masking"
-                            width={editOriginalImageSize.width} 
-                            height={editOriginalImageSize.height} 
+                            width={editOriginalImageSize.width}
+                            height={editOriginalImageSize.height}
                             className="block w-full h-auto"
-                            unoptimized 
+                            unoptimized
                          />
                         <canvas
                             ref={canvasRef}
@@ -593,11 +678,11 @@ export function EditingForm({
                                 <Image
                                     src={editMaskPreviewUrl}
                                     alt="Generated mask preview"
-                                    width={0} 
-                                    height={134} 
+                                    width={0}
+                                    height={134}
                                     className="max-w-full block"
-                                    style={{ width: 'auto', height: '134px' }} 
-                                    unoptimized 
+                                    style={{ width: 'auto', height: '134px' }}
+                                    unoptimized
                                 />
                             </div>
                         </div>
