@@ -100,8 +100,8 @@ export function HistoryPanel({
 
     return (
         <Card className='flex h-full w-full flex-col overflow-hidden rounded-lg border border-white/10 bg-black'>
-            <CardHeader className='flex flex-row items-center justify-between gap-4 border-b border-white/10 px-4 py-3'>
-                <div className='flex items-center gap-2'>
+            <CardHeader className='flex flex-row items-start justify-between gap-4 border-b border-white/10 px-4 py-3'>
+                <div className='flex flex-col gap-1'>
                     <CardTitle className='text-lg font-medium text-white'>History</CardTitle>
                     {totalCost > 0 && (
                         <Dialog open={isTotalCostDialogOpen} onOpenChange={setIsTotalCostDialogOpen}>
@@ -109,7 +109,7 @@ export function HistoryPanel({
                                 <button
                                     className='mt-0.5 flex items-center gap-1 rounded-full bg-green-600/80 px-1.5 py-0.5 text-[12px] text-white transition-colors hover:bg-green-500/90'
                                     aria-label='Show total cost summary'>
-                                    Total Cost: ${totalCost.toFixed(4)}
+                                    Total Estimated Cost: ${totalCost.toFixed(4)}
                                 </button>
                             </DialogTrigger>
                             <DialogContent className='border-neutral-700 bg-neutral-900 text-white sm:max-w-[450px]'>

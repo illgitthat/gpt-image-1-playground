@@ -3,10 +3,8 @@
 import { ModeToggle } from '@/components/mode-toggle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -68,10 +66,7 @@ type GenerationFormProps = {
     setBackground: React.Dispatch<React.SetStateAction<GenerationFormData['background']>>;
     moderation: GenerationFormData['moderation'];
     setModeration: React.Dispatch<React.SetStateAction<GenerationFormData['moderation']>>;
-    enableStreaming: boolean;
-    setEnableStreaming: React.Dispatch<React.SetStateAction<boolean>>;
-    partialImages: 1 | 2 | 3;
-    setPartialImages: React.Dispatch<React.SetStateAction<1 | 2 | 3>>;
+    streamingAllowed: boolean;
 };
 
 const RadioItemWithIcon = ({
@@ -124,19 +119,13 @@ export function GenerationForm({
     setBackground,
     moderation,
     setModeration,
-    enableStreaming,
-    setEnableStreaming,
-    partialImages,
-    setPartialImages
+    streamingAllowed
 }: GenerationFormProps) {
     const showCompression = outputFormat === 'jpeg' || outputFormat === 'webp';
 
-    // Disable streaming when n > 1 (OpenAI limitation)
     React.useEffect(() => {
-        if (n[0] > 1 && enableStreaming) {
-            setEnableStreaming(false);
-        }
-    }, [n, enableStreaming, setEnableStreaming]);
+        setModel('gpt-image-1.5');
+    }, [setModel]);
 
     const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -179,10 +168,12 @@ export function GenerationForm({
             </CardHeader>
             <form onSubmit={handleSubmit} className='flex h-full flex-1 flex-col overflow-hidden'>
                 <CardContent className='flex-1 space-y-5 overflow-y-auto p-4'>
-                    <div className='space-y-1.5'>
-                        <Label htmlFor='model-select' className='text-white'>
-                            Model
-                        </Label>
+                    {/* Model section hidden by request
+                    <div className='space-y-1'>
+                        <Label className='text-white'>Model</Label>
+                        <p className='text-xs text-white/60'>Using gpt-image-1.5 for now.</p>
+                        {/**
+                         * Model selector hidden by request; keep for potential future use.
                         <div className='flex items-center gap-4'>
                             <Select value={model} onValueChange={(value) => setModel(value as GenerationFormData['model'])} disabled={isLoading}>
                                 <SelectTrigger
@@ -202,83 +193,30 @@ export function GenerationForm({
                                     </SelectItem>
                                 </SelectContent>
                             </Select>
+                        </div>
+                         * /}
+                    </div>
+                    */}
+
+                    {/* Streaming Previews section hidden by request
+                    <div className='space-y-2'>
+                        <div className='flex items-center gap-2'>
+                            <Label className='text-white'>Streaming Previews</Label>
+                            <span className='text-xs text-white/60'>Shows in-progress frames while your image generates (adds a small extra cost).</span>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <div className='flex items-center gap-2'>
-                                        <Checkbox
-                                            id='enable-streaming'
-                                            checked={enableStreaming}
-                                            onCheckedChange={(checked) => setEnableStreaming(!!checked)}
-                                            disabled={isLoading || n[0] > 1}
-                                            className='border-white/40 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black disabled:cursor-not-allowed disabled:opacity-50'
-                                        />
-                                        <Label
-                                            htmlFor='enable-streaming'
-                                            className={`text-sm ${n[0] > 1 ? 'cursor-not-allowed text-white/40' : 'cursor-pointer text-white/80'}`}>
-                                            Enable Streaming
-                                        </Label>
-                                    </div>
+                                    <HelpCircle className='h-4 w-4 cursor-help text-white/40 hover:text-white/60' />
                                 </TooltipTrigger>
                                 <TooltipContent className='max-w-[250px]'>
-                                    {n[0] > 1
-                                        ? 'Streaming is only supported when generating a single image (n=1).'
-                                        : 'Shows partial preview images as they are generated, providing a more interactive experience.'}
+                                    Each preview image adds ~$0.003 to the cost (100 additional output tokens).
                                 </TooltipContent>
                             </Tooltip>
                         </div>
+                        {!streamingAllowed && (
+                            <p className='text-xs text-white/50'>Available when generating a single image (n = 1).</p>
+                        )}
                     </div>
-
-                    {enableStreaming && (
-                        <div className='space-y-3'>
-                            <div className='flex items-center gap-2'>
-                                <Label className='text-white'>Preview Images</Label>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <HelpCircle className='h-4 w-4 cursor-help text-white/40 hover:text-white/60' />
-                                    </TooltipTrigger>
-                                    <TooltipContent className='max-w-[250px]'>
-                                        Each preview image adds ~$0.003 to the cost (100 additional output tokens).
-                                    </TooltipContent>
-                                </Tooltip>
-                            </div>
-                            <RadioGroup
-                                value={String(partialImages)}
-                                onValueChange={(value) => setPartialImages(Number(value) as 1 | 2 | 3)}
-                                disabled={isLoading}
-                                className='flex gap-x-5'>
-                                <div className='flex items-center space-x-2'>
-                                    <RadioGroupItem
-                                        value='1'
-                                        id='partial-1'
-                                        className='border-white/40 text-white data-[state=checked]:border-white data-[state=checked]:text-white'
-                                    />
-                                    <Label htmlFor='partial-1' className='cursor-pointer text-white/80'>
-                                        1
-                                    </Label>
-                                </div>
-                                <div className='flex items-center space-x-2'>
-                                    <RadioGroupItem
-                                        value='2'
-                                        id='partial-2'
-                                        className='border-white/40 text-white data-[state=checked]:border-white data-[state=checked]:text-white'
-                                    />
-                                    <Label htmlFor='partial-2' className='cursor-pointer text-white/80'>
-                                        2
-                                    </Label>
-                                </div>
-                                <div className='flex items-center space-x-2'>
-                                    <RadioGroupItem
-                                        value='3'
-                                        id='partial-3'
-                                        className='border-white/40 text-white data-[state=checked]:border-white data-[state=checked]:text-white'
-                                    />
-                                    <Label htmlFor='partial-3' className='cursor-pointer text-white/80'>
-                                        3
-                                    </Label>
-                                </div>
-                            </RadioGroup>
-                        </div>
-                    )}
+                    */}
 
                     <div className='space-y-1.5'>
                         <Label htmlFor='prompt' className='text-white'>

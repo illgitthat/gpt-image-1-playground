@@ -114,11 +114,14 @@ export default function HomePage() {
 
     const [editModel, setEditModel] = React.useState<EditingFormData['model']>('gpt-image-1.5');
 
-    // Streaming state (shared between generate and edit modes)
-    const [enableStreaming, setEnableStreaming] = React.useState(false);
-    const [partialImages, setPartialImages] = React.useState<1 | 2 | 3>(2);
+    // Streaming previews are on by default (auto-disabled when multiple images are requested)
+    const [partialImages] = React.useState<1 | 2 | 3>(3);
     // Streaming preview images (base64 data URLs for partial images during streaming)
     const [streamingPreviewImages, setStreamingPreviewImages] = React.useState<Map<number, string>>(new Map());
+
+    const isStreamingAllowed = React.useMemo(() => {
+        return mode === 'generate' ? genN[0] === 1 : editN[0] === 1;
+    }, [mode, genN, editN]);
 
     const getImageSrc = React.useCallback(
         (filename: string): string | undefined => {
@@ -332,8 +335,8 @@ export default function HomePage() {
         }
         apiFormData.append('mode', mode);
 
-        // Add streaming parameters if enabled
-        if (enableStreaming) {
+        // Add streaming parameters when allowed (single-image requests only)
+        if (isStreamingAllowed) {
             apiFormData.append('stream', 'true');
             apiFormData.append('partial_images', partialImages.toString());
         }
@@ -369,7 +372,7 @@ export default function HomePage() {
             }
         }
 
-        console.log('Sending request to /api/images with mode:', mode, 'streaming:', enableStreaming);
+        console.log('Sending request to /api/images with mode:', mode, 'streaming:', isStreamingAllowed);
 
         try {
             const response = await fetch('/api/images', {
@@ -935,10 +938,7 @@ export default function HomePage() {
                                 setBackground={setGenBackground}
                                 moderation={genModeration}
                                 setModeration={setGenModeration}
-                                enableStreaming={enableStreaming}
-                                setEnableStreaming={setEnableStreaming}
-                                partialImages={partialImages}
-                                setPartialImages={setPartialImages}
+                                streamingAllowed={genN[0] === 1}
                             />
                         </div>
                         <div className={mode === 'edit' ? 'block h-full w-full' : 'hidden'}>
@@ -979,10 +979,7 @@ export default function HomePage() {
                                 setEditDrawnPoints={setEditDrawnPoints}
                                 editMaskPreviewUrl={editMaskPreviewUrl}
                                 setEditMaskPreviewUrl={setEditMaskPreviewUrl}
-                                enableStreaming={enableStreaming}
-                                setEnableStreaming={setEnableStreaming}
-                                partialImages={partialImages}
-                                setPartialImages={setPartialImages}
+                                streamingAllowed={editN[0] === 1}
                             />
                         </div>
                     </div>
