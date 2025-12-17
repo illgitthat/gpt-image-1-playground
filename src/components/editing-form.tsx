@@ -26,7 +26,9 @@ import {
     UploadCloud,
     Lock,
     LockOpen,
-    HelpCircle
+    HelpCircle,
+    ClipboardPaste,
+    Link2
 } from 'lucide-react';
 import Image from 'next/image';
 import * as React from 'react';
@@ -157,6 +159,10 @@ export function EditingForm({
     enhanceError
 }: EditingFormProps) {
     const [firstImagePreviewUrl, setFirstImagePreviewUrl] = React.useState<string | null>(null);
+    const [imageUrl, setImageUrl] = React.useState('');
+    const [isFetchingImage, setIsFetchingImage] = React.useState(false);
+    const [isPastingImage, setIsPastingImage] = React.useState(false);
+    const [imageAddError, setImageAddError] = React.useState<string | null>(null);
 
     React.useEffect(() => {
         setEditModel('gpt-image-1.5');
@@ -300,6 +306,47 @@ export function EditingForm({
         setEditMaskPreviewUrl(null);
     };
 
+    const addImageFilesToForm = (files: File[]) => {
+        if (files.length === 0) return;
+
+        setImageAddError(null);
+
+        const availableSlots = maxImages - imageFiles.length;
+
+        if (availableSlots <= 0) {
+            setImageAddError(`You can only select up to ${maxImages} images.`);
+            return;
+        }
+
+        const filesToAdd = files.slice(0, availableSlots);
+
+        if (filesToAdd.length === 0) return;
+
+        if (files.length > filesToAdd.length) {
+            setImageAddError(`Only ${availableSlots} slot${availableSlots === 1 ? '' : 's'} left (max ${maxImages}).`);
+        }
+
+        setImageFiles((prevFiles) => [...prevFiles, ...filesToAdd]);
+
+        const newFilePromises = filesToAdd.map((file) => {
+            return new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = () => reject(new Error('Failed to read image file.'));
+                reader.readAsDataURL(file);
+            });
+        });
+
+        Promise.all(newFilePromises)
+            .then((newUrls) => {
+                setSourceImagePreviewUrls((prevUrls) => [...prevUrls, ...newUrls]);
+            })
+            .catch((error) => {
+                console.error('Error reading new image files:', error);
+                setImageAddError('Failed to read one of the selected images.');
+            });
+    };
+
     const generateAndSaveMask = () => {
         if (!editOriginalImageSize || editDrawnPoints.length === 0) {
             setEditGeneratedMaskFile(null);
@@ -347,38 +394,97 @@ export function EditingForm({
     const handleImageFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         if (event.target.files) {
             const newFiles = Array.from(event.target.files);
-            const totalFiles = imageFiles.length + newFiles.length;
+            addImageFilesToForm(newFiles);
+            event.target.value = '';
+        }
+    };
 
-            if (totalFiles > maxImages) {
-                alert(`You can only select up to ${maxImages} images.`);
-                const allowedNewFiles = newFiles.slice(0, maxImages - imageFiles.length);
-                if (allowedNewFiles.length === 0) {
-                    event.target.value = '';
-                    return;
+    const handlePasteFromClipboard = async () => {
+        if (!navigator.clipboard || typeof navigator.clipboard.read !== 'function') {
+            setImageAddError('Clipboard paste is not supported in this browser. You can still press Ctrl/Cmd+V.');
+            return;
+        }
+
+        if (imageFiles.length >= maxImages) {
+            setImageAddError(`You can only select up to ${maxImages} images.`);
+            return;
+        }
+
+        setIsPastingImage(true);
+        setImageAddError(null);
+
+        try {
+            const items = await navigator.clipboard.read();
+            const imageBlobs: Blob[] = [];
+
+            for (const item of items) {
+                for (const type of item.types) {
+                    if (type.startsWith('image/')) {
+                        const blob = await item.getType(type);
+                        imageBlobs.push(blob);
+                        break;
+                    }
                 }
-                newFiles.splice(allowedNewFiles.length);
             }
 
-            setImageFiles((prevFiles) => [...prevFiles, ...newFiles]);
+            if (imageBlobs.length === 0) {
+                throw new Error('Clipboard does not contain an image.');
+            }
 
-            const newFilePromises = newFiles.map((file) => {
-                return new Promise<string>((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result as string);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(file);
-                });
+            const files = imageBlobs.map((blob, index) => {
+                const extension = blob.type.split('/')[1] || 'png';
+                return new File([blob], `pasted-image-${Date.now()}-${index}.${extension}`, { type: blob.type });
             });
 
-            Promise.all(newFilePromises)
-                .then((newUrls) => {
-                    setSourceImagePreviewUrls((prevUrls) => [...prevUrls, ...newUrls]);
-                })
-                .catch((error) => {
-                    console.error('Error reading new image files:', error);
-                });
+            addImageFilesToForm(files);
+        } catch (err: unknown) {
+            console.error('Error pasting image from clipboard:', err);
+            setImageAddError(err instanceof Error ? err.message : 'Unable to read image from clipboard.');
+        } finally {
+            setIsPastingImage(false);
+        }
+    };
 
-            event.target.value = '';
+    const handleFetchFromUrl = async () => {
+        if (!imageUrl.trim()) {
+            setImageAddError('Please enter an image URL.');
+            return;
+        }
+
+        if (imageFiles.length >= maxImages) {
+            setImageAddError(`You can only select up to ${maxImages} images.`);
+            return;
+        }
+
+        setIsFetchingImage(true);
+        setImageAddError(null);
+
+        try {
+            const parsedUrl = new URL(imageUrl.trim());
+            const response = await fetch(parsedUrl.toString());
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch image (status ${response.status}).`);
+            }
+
+            const blob = await response.blob();
+
+            if (!blob.type.startsWith('image/')) {
+                throw new Error('The URL did not return an image.');
+            }
+
+            const extensionFromType = blob.type.split('/')[1] || 'png';
+            const urlPathname = parsedUrl.pathname.split('/').pop();
+            const inferredName = urlPathname && urlPathname.includes('.') ? urlPathname : `fetched-image.${extensionFromType}`;
+            const file = new File([blob], inferredName, { type: blob.type });
+
+            addImageFilesToForm([file]);
+            setImageUrl('');
+        } catch (err: unknown) {
+            console.error('Error fetching image from URL:', err);
+            setImageAddError(err instanceof Error ? err.message : 'Unable to fetch image from the provided URL.');
+        } finally {
+            setIsFetchingImage(false);
         }
     };
 
@@ -585,7 +691,7 @@ export function EditingForm({
                     </div>
 
                     <div className='space-y-2'>
-                        <Label className='text-white'>Source Image(s) [Max: 10]</Label>
+                        <Label className='text-white'>Source Image(s) [Max: {maxImages}]</Label>
                         <Label
                             htmlFor='image-files-input'
                             className='flex h-10 w-full cursor-pointer items-center justify-between rounded-md border border-white/20 bg-black px-3 py-2 text-sm transition-colors hover:bg-white/5'>
@@ -603,6 +709,54 @@ export function EditingForm({
                             disabled={isLoading || imageFiles.length >= maxImages}
                             className='sr-only'
                         />
+                        <div className='flex flex-col gap-3 sm:flex-row'>
+                            <Button
+                                type='button'
+                                variant='outline'
+                                onClick={handlePasteFromClipboard}
+                                disabled={isLoading || isPastingImage}
+                                className='border-white/20 text-white/80 hover:bg-white/10 hover:text-white'>
+                                {isPastingImage ? (
+                                    <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                                ) : (
+                                    <ClipboardPaste className='mr-2 h-4 w-4' />
+                                )}
+                                Paste
+                            </Button>
+                            <div className='flex flex-1 gap-2'>
+                                <Input
+                                    type='url'
+                                    inputMode='url'
+                                    placeholder='Paste image URL...'
+                                    value={imageUrl}
+                                    onChange={(e) => setImageUrl(e.target.value)}
+                                    disabled={isLoading || isFetchingImage}
+                                    className='border-white/20 bg-black text-white placeholder:text-white/40 focus:border-white/50 focus:ring-white/50'
+                                />
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            type='button'
+                                            variant='outline'
+                                            size='icon'
+                                            onClick={handleFetchFromUrl}
+                                            disabled={isLoading || isFetchingImage || !imageUrl.trim()}
+                                            className='shrink-0 border-white/20 text-white/80 hover:bg-white/10 hover:text-white'>
+                                            {isFetchingImage ? (
+                                                <Loader2 className='h-4 w-4 animate-spin' />
+                                            ) : (
+                                                <Link2 className='h-4 w-4' />
+                                            )}
+                                            <span className='sr-only'>Fetch from URL</span>
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent className='bg-black text-white'>
+                                        Fetch image from URL
+                                    </TooltipContent>
+                                </Tooltip>
+                            </div>
+                        </div>
+                        {imageAddError && <p className='text-xs text-red-300'>{imageAddError}</p>}
                         {sourceImagePreviewUrls.length > 0 && (
                             <div className='flex space-x-2 overflow-x-auto pt-2'>
                                 {sourceImagePreviewUrls.map((url, index) => (
