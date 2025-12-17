@@ -15,12 +15,13 @@ import {
   DialogClose
 } from "@/components/ui/dialog";
 import { Copy, Check, Layers, DollarSign, Pencil, Sparkles as SparklesIcon } from "lucide-react";
-import type { HistoryMetadata } from '@/app/page'; 
+import type { HistoryMetadata } from '@/app/page';
 import { cn } from "@/lib/utils";
+import { CACHED_INPUT_COST_PER_TOKEN, IMAGE_OUTPUT_COST_PER_TOKEN, INPUT_COST_PER_TOKEN } from "@/lib/cost-utils";
 
 type HistoryPanelProps = {
   history: HistoryMetadata[];
-  onSelectImage: (item: HistoryMetadata) => void; 
+  onSelectImage: (item: HistoryMetadata) => void;
   onClearHistory: () => void;
 };
 
@@ -32,7 +33,7 @@ const formatDuration = (ms: number): string => {
 }
 
 const calculateCost = (value: number, rate: number): string => {
-    
+
     const cost = value * rate;
     return isNaN(cost) ? 'N/A' : cost.toFixed(4);
 }
@@ -53,7 +54,7 @@ export function HistoryPanel({ history, onSelectImage, onClearHistory }: History
       }
       images += item.images?.length ?? 0;
     });
-    
+
     return { totalCost: Math.round(cost * 10000) / 10000, totalImages: images };
   }, [history]);
 
@@ -61,11 +62,11 @@ export function HistoryPanel({ history, onSelectImage, onClearHistory }: History
 
 
   const handleCopy = async (text: string | null | undefined, timestamp: number) => {
-    if (!text) return; 
+    if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
       setCopiedTimestamp(timestamp);
-      setTimeout(() => setCopiedTimestamp(null), 1500); 
+      setTimeout(() => setCopiedTimestamp(null), 1500);
     } catch (err) {
       console.error('Failed to copy text: ', err);
     }
@@ -93,11 +94,11 @@ export function HistoryPanel({ history, onSelectImage, onClearHistory }: History
                            <DialogDescription className="sr-only">A summary of the total estimated cost for all generated images in the history.</DialogDescription>
                        </DialogHeader>
                        <div className="text-neutral-400 text-xs pt-1 space-y-1">
-                           <p>Pricing for gpt-image-1:</p>
+                  <p>Pricing for gpt-image-1.5:</p>
                            <ul className="list-disc pl-4">
-                              <li>Text Input: $5 / 1M tokens</li>
-                              <li>Image Input: $10 / 1M tokens</li>
-                              <li>Image Output: $40 / 1M tokens</li>
+                    <li>Input: $8 / 1M tokens</li>
+                    <li>Cached Input: $2 / 1M tokens</li>
+                    <li>Output: $32 / 1M tokens</li>
                            </ul>
                        </div>
                        <div className="py-4 text-sm space-y-2 text-neutral-300">
@@ -136,11 +137,11 @@ export function HistoryPanel({ history, onSelectImage, onClearHistory }: History
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {[...history].reverse().map((item) => { 
-              const firstImage = item.images?.[0]; 
+              {[...history].reverse().map((item) => {
+                const firstImage = item.images?.[0];
               const imageCount = item.images?.length ?? 0;
               const isMultiImage = imageCount > 1;
-              const itemKey = item.timestamp; 
+                const itemKey = item.timestamp;
 
               return (
                 <div key={itemKey} className="flex flex-col">
@@ -180,8 +181,8 @@ export function HistoryPanel({ history, onSelectImage, onClearHistory }: History
                        <Dialog open={openCostDialogTimestamp === itemKey} onOpenChange={(isOpen) => !isOpen && setOpenCostDialogTimestamp(null)}>
                          <DialogTrigger asChild>
                            <button
-                             onClick={(e) => { e.stopPropagation(); setOpenCostDialogTimestamp(itemKey); }} 
-                             className="absolute top-1 right-1 bg-green-600/80 hover:bg-green-500/90 text-white text-[11px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5 transition-colors z-20" 
+                            onClick={(e) => { e.stopPropagation(); setOpenCostDialogTimestamp(itemKey); }}
+                            className="absolute top-1 right-1 bg-green-600/80 hover:bg-green-500/90 text-white text-[11px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5 transition-colors z-20"
                              aria-label="Show cost breakdown"
                            >
                              <DollarSign size={12} />
@@ -194,19 +195,23 @@ export function HistoryPanel({ history, onSelectImage, onClearHistory }: History
                              <DialogDescription className="sr-only">Estimated cost breakdown for this image generation.</DialogDescription>
                            </DialogHeader>
                            <div className="text-neutral-400 text-xs pt-1 space-y-1">
-                               <p>Pricing for gpt-image-1:</p>
+                            <p>Pricing for gpt-image-1.5:</p>
                                <ul className="list-disc pl-4">
-                                  <li>Text Input: $5 / 1M tokens</li>
-                                  <li>Image Input: $10 / 1M tokens</li>
-                                  <li>Image Output: $40 / 1M tokens</li>
+                              <li>Input: $8 / 1M tokens</li>
+                              <li>Cached Input: $2 / 1M tokens</li>
+                              <li>Output: $32 / 1M tokens</li>
                                </ul>
                            </div>
                            <div className="py-4 text-sm space-y-2 text-neutral-300">
-                              <div className="flex justify-between"><span>Text Input Tokens:</span> <span>{item.costDetails.text_input_tokens.toLocaleString()} (~${calculateCost(item.costDetails.text_input_tokens, 0.000005)})</span></div>
+                            <div className="flex justify-between"><span>Text Input Tokens:</span> <span>{item.costDetails.text_input_tokens.toLocaleString()}</span></div>
                               {item.costDetails.image_input_tokens > 0 && (
-                                  <div className="flex justify-between"><span>Image Input Tokens:</span> <span>{item.costDetails.image_input_tokens.toLocaleString()} (~${calculateCost(item.costDetails.image_input_tokens, 0.000010)})</span></div>
+                              <div className="flex justify-between"><span>Image Input Tokens:</span> <span>{item.costDetails.image_input_tokens.toLocaleString()}</span></div>
                               )}
-                              <div className="flex justify-between"><span>Image Output Tokens:</span> <span>{item.costDetails.image_output_tokens.toLocaleString()} (~${calculateCost(item.costDetails.image_output_tokens, 0.000040)})</span></div>
+                            {item.costDetails.cached_input_tokens > 0 && (
+                              <div className="flex justify-between"><span>Cached Input Tokens:</span> <span>{item.costDetails.cached_input_tokens.toLocaleString()} (~${calculateCost(item.costDetails.cached_input_tokens, CACHED_INPUT_COST_PER_TOKEN)})</span></div>
+                            )}
+                            <div className="flex justify-between"><span>Billable Input Tokens:</span> <span>{item.costDetails.billable_input_tokens.toLocaleString()} (~${calculateCost(item.costDetails.billable_input_tokens, INPUT_COST_PER_TOKEN)})</span></div>
+                            <div className="flex justify-between"><span>Image Output Tokens:</span> <span>{item.costDetails.image_output_tokens.toLocaleString()} (~${calculateCost(item.costDetails.image_output_tokens, IMAGE_OUTPUT_COST_PER_TOKEN)})</span></div>
                               <hr className="border-neutral-700 my-2"/>
                               <div className="flex justify-between font-medium text-white">
                                   <span>Total Estimated Cost:</span>

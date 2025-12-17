@@ -510,7 +510,7 @@ export function EditingForm({
          <div>
             <CardTitle className="text-lg font-medium text-white">Edit Image</CardTitle>
             <CardDescription className="text-white/60 mt-1">
-              Modify an image using gpt-image-1.
+            Modify an image using gpt-image-1.5.
             </CardDescription>
          </div>
          <ModeToggle currentMode={currentMode} onModeChange={onModeChange} />

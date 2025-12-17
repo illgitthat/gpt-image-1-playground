@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
     }
 
     let result: OpenAI.Images.ImagesResponse;
-    const model = useAzure ? process.env.AZURE_OPENAI_DEPLOYMENT_NAME! : 'gpt-image-1';
+    const model = useAzure ? process.env.AZURE_OPENAI_DEPLOYMENT_NAME! : 'gpt-image-1.5';
 
     if (mode === 'generate') {
       const n = parseInt(formData.get('n') as string || '1', 10);

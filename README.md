@@ -1,6 +1,6 @@
-# <img src="./public/favicon.svg" alt="Project Logo" width="30" height="30" style="vertical-align: middle; margin-right: 8px;"> GPT-IMAGE-1 Playground
+# <img src="./public/favicon.svg" alt="Project Logo" width="30" height="30" style="vertical-align: middle; margin-right: 8px;"> GPT-IMAGE-1.5 Playground
 
-A web-based playground to interact with OpenAI's `gpt-image-1` model for generating and editing images.
+A web-based playground to interact with OpenAI's `gpt-image-1.5` model for generating and editing images.
 
 <p align="center">
   <img src="./readme-images/interface.jpg" alt="Interface" width="600"/>
@@ -62,7 +62,7 @@ You need an API key to use this application. You can configure it to use either 
 
 **Option 2: Azure OpenAI Service**
 
-1.  Ensure you have an Azure OpenAI resource and a model deployment (e.g., for `gpt-image-1`).
+1.  Ensure you have an Azure OpenAI resource and a model deployment (e.g., for `gpt-image-1.5`).
 2.  If you don't have a `.env.local` file in the project root, create one.
 3.  Add your Azure OpenAI credentials and deployment details to the `.env.local` file:
 
@@ -110,7 +110,7 @@ npm run dev
 
 ### 4. Open the Playground
 
-Open [http://localhost:3000](http://localhost:3000) in your web browser. You should now be able to use the gpt-image-1 Playground!
+Open [http://localhost:3000](http://localhost:3000) in your web browser. You should now be able to use the gpt-image-1.5 Playground!
 
 ## 🤝 Contributing
 
