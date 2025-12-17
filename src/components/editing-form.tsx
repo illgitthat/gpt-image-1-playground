@@ -85,6 +85,9 @@ type EditingFormProps = {
     editMaskPreviewUrl: string | null;
     setEditMaskPreviewUrl: React.Dispatch<React.SetStateAction<string | null>>;
     streamingAllowed: boolean;
+    onEnhancePrompt: () => void;
+    isEnhancingPrompt: boolean;
+    enhanceError: string | null;
 };
 
 const RadioItemWithIcon = ({
@@ -148,7 +151,10 @@ export function EditingForm({
     setEditDrawnPoints,
     editMaskPreviewUrl,
     setEditMaskPreviewUrl,
-    streamingAllowed
+    streamingAllowed,
+    onEnhancePrompt,
+    isEnhancingPrompt,
+    enhanceError
 }: EditingFormProps) {
     const [firstImagePreviewUrl, setFirstImagePreviewUrl] = React.useState<string | null>(null);
 
@@ -538,9 +544,35 @@ export function EditingForm({
                     */}
 
                     <div className='space-y-1.5'>
-                        <Label htmlFor='edit-prompt' className='text-white'>
-                            Prompt
-                        </Label>
+                        <div className='flex items-center justify-between gap-2'>
+                            <Label htmlFor='edit-prompt' className='text-white'>
+                                Prompt
+                            </Label>
+                            <div className='flex items-center gap-2'>
+                                {enhanceError && <span className='text-xs text-red-300'>{enhanceError}</span>}
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            type='button'
+                                            variant='ghost'
+                                            size='sm'
+                                            onClick={onEnhancePrompt}
+                                            disabled={isLoading || isEnhancingPrompt || !editPrompt.trim()}
+                                            className='h-8 gap-1 rounded-full border border-white/15 bg-white/5 px-3 text-xs text-white/80 hover:bg-white/15 hover:text-white'>
+                                            {isEnhancingPrompt ? (
+                                                <Loader2 className='h-4 w-4 animate-spin' />
+                                            ) : (
+                                                <Sparkles className='h-4 w-4' />
+                                            )}
+                                            <span className='hidden sm:inline'>Auto enhance</span>
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent className='bg-black text-white'>
+                                        Refine the edit prompt with GPT-5.2 Chat.
+                                    </TooltipContent>
+                                </Tooltip>
+                            </div>
+                        </div>
                         <Textarea
                             id='edit-prompt'
                             placeholder='e.g., Add a party hat to the main subject'
