@@ -19,18 +19,6 @@ const useAzure = Boolean(
     azureConfig.apiKey && azureConfig.endpoint && azureConfig.apiVersion && azureDeploymentForEnhance
 );
 
-const apiClient = useAzure
-    ? new AzureOpenAI({
-        apiKey: azureConfig.apiKey!,
-        endpoint: azureConfig.endpoint!,
-        apiVersion: azureConfig.apiVersion!,
-        deployment: azureDeploymentForEnhance!
-    })
-    : new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-        baseURL: process.env.OPENAI_API_BASE_URL
-    });
-
 function sha256(data: string): string {
     return crypto.createHash('sha256').update(data).digest('hex');
 }
@@ -90,6 +78,18 @@ export async function POST(request: NextRequest) {
 
         const messages = buildPromptEnhanceMessages(mode, prompt);
         const modelToUse = useAzure ? azureDeploymentForEnhance! : promptEnhanceModel;
+
+        const apiClient = useAzure
+            ? new AzureOpenAI({
+                apiKey: azureConfig.apiKey!,
+                endpoint: azureConfig.endpoint!,
+                apiVersion: azureConfig.apiVersion!,
+                deployment: azureDeploymentForEnhance!
+            })
+            : new OpenAI({
+                apiKey: process.env.OPENAI_API_KEY,
+                baseURL: process.env.OPENAI_API_BASE_URL
+            });
 
         const completion = await apiClient.chat.completions.create({
             model: modelToUse,
