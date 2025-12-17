@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (streamEnabled && !useAzure) {
+      if (streamEnabled) {
         const actualPartialImages = Math.max(1, Math.min(partialImagesCount, 3)) as 1 | 2 | 3;
 
         const streamParams = {
@@ -346,7 +346,7 @@ export async function POST(request: NextRequest) {
         quality: quality === 'auto' ? undefined : quality
       };
 
-      if (streamEnabled && !useAzure) {
+      if (streamEnabled) {
         const streamEditParams = {
           ...baseEditParams,
           stream: true as const,
