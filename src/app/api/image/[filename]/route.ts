@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
-import { lookup } from 'mime-types'; 
+import { lookup } from 'mime-types';
 
-// Base directory where images are stored (outside nextjs-app)
+// Base directory where images are stored (outside gpt-image-playground)
 const imageBaseDir = path.resolve(process.cwd(), 'generated-images');
 
 export async function GET(
@@ -29,7 +29,7 @@ export async function GET(
 
     const fileBuffer = await fs.readFile(filepath);
 
-    const contentType = lookup(filename) || 'application/octet-stream'; 
+    const contentType = lookup(filename) || 'application/octet-stream';
 
     return new NextResponse(fileBuffer, {
       status: 200,
