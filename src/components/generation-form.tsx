@@ -67,6 +67,9 @@ type GenerationFormProps = {
     moderation: GenerationFormData['moderation'];
     setModeration: React.Dispatch<React.SetStateAction<GenerationFormData['moderation']>>;
     streamingAllowed: boolean;
+    onEnhancePrompt: () => void;
+    isEnhancingPrompt: boolean;
+    enhanceError: string | null;
 };
 
 const RadioItemWithIcon = ({
@@ -119,7 +122,10 @@ export function GenerationForm({
     setBackground,
     moderation,
     setModeration,
-    streamingAllowed
+    streamingAllowed,
+    onEnhancePrompt,
+    isEnhancingPrompt,
+    enhanceError
 }: GenerationFormProps) {
     const showCompression = outputFormat === 'jpeg' || outputFormat === 'webp';
 
@@ -219,9 +225,35 @@ export function GenerationForm({
                     */}
 
                     <div className='space-y-1.5'>
-                        <Label htmlFor='prompt' className='text-white'>
-                            Prompt
-                        </Label>
+                        <div className='flex items-center justify-between gap-2'>
+                            <Label htmlFor='prompt' className='text-white'>
+                                Prompt
+                            </Label>
+                            <div className='flex items-center gap-2'>
+                                {enhanceError && <span className='text-xs text-red-300'>{enhanceError}</span>}
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            type='button'
+                                            variant='ghost'
+                                            size='sm'
+                                            onClick={onEnhancePrompt}
+                                            disabled={isLoading || isEnhancingPrompt || !prompt.trim()}
+                                            className='h-8 gap-1 rounded-full border border-white/15 bg-white/5 px-3 text-xs text-white/80 hover:bg-white/15 hover:text-white'>
+                                            {isEnhancingPrompt ? (
+                                                <Loader2 className='h-4 w-4 animate-spin' />
+                                            ) : (
+                                                <Sparkles className='h-4 w-4' />
+                                            )}
+                                            <span className='hidden sm:inline'>Auto enhance</span>
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent className='bg-black text-white'>
+                                        Refine the prompt with GPT-5.2 Chat.
+                                    </TooltipContent>
+                                </Tooltip>
+                            </div>
+                        </div>
                         <Textarea
                             id='prompt'
                             placeholder='e.g., A photorealistic cat astronaut floating in space'

@@ -70,8 +70,12 @@ export default function HomePage() {
     const [isPasswordRequiredByBackend, setIsPasswordRequiredByBackend] = React.useState<boolean | null>(null);
     const [clientPasswordHash, setClientPasswordHash] = React.useState<string | null>(null);
     const [isLoading, setIsLoading] = React.useState(false);
+    const [isEnhancingGenPrompt, setIsEnhancingGenPrompt] = React.useState(false);
+    const [isEnhancingEditPrompt, setIsEnhancingEditPrompt] = React.useState(false);
     const [isSendingToEdit, setIsSendingToEdit] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
+    const [genPromptEnhanceError, setGenPromptEnhanceError] = React.useState<string | null>(null);
+    const [editPromptEnhanceError, setEditPromptEnhanceError] = React.useState<string | null>(null);
     const [latestImageBatch, setLatestImageBatch] = React.useState<{ path: string; filename: string }[] | null>(null);
     const [imageOutputView, setImageOutputView] = React.useState<'grid' | number>('grid');
     const [history, setHistory] = React.useState<HistoryMetadata[]>([]);
@@ -311,6 +315,62 @@ export default function HomePage() {
         if (format === 'webp') return 'image/webp';
 
         return 'image/png';
+    };
+
+    const handlePromptEnhance = async (targetMode: 'generate' | 'edit') => {
+        const isGenerate = targetMode === 'generate';
+        const targetPrompt = isGenerate ? genPrompt : editPrompt;
+        const setLoading = isGenerate ? setIsEnhancingGenPrompt : setIsEnhancingEditPrompt;
+        const setPrompt = isGenerate ? setGenPrompt : setEditPrompt;
+        const setEnhanceError = isGenerate ? setGenPromptEnhanceError : setEditPromptEnhanceError;
+
+        if (!targetPrompt.trim()) {
+            setEnhanceError('Add a prompt first.');
+            return;
+        }
+
+        if (isPasswordRequiredByBackend && !clientPasswordHash) {
+            setError('Password is required. Please configure the password by clicking the lock icon.');
+            setPasswordDialogContext('initial');
+            setIsPasswordDialogOpen(true);
+            return;
+        }
+
+        setEnhanceError(null);
+        setLoading(true);
+
+        try {
+            const response = await fetch('/api/prompt-enhance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt: targetPrompt,
+                    mode: targetMode,
+                    passwordHash: isPasswordRequiredByBackend ? clientPasswordHash : undefined
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                if (response.status === 401 && isPasswordRequiredByBackend) {
+                    setPasswordDialogContext('retry');
+                    setIsPasswordDialogOpen(true);
+                }
+                throw new Error(result.error || 'Failed to enhance prompt.');
+            }
+
+            if (!result.prompt) {
+                throw new Error('No enhanced prompt returned.');
+            }
+
+            setPrompt(result.prompt as string);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Failed to enhance prompt.';
+            setEnhanceError(message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleApiCall = async (formData: GenerationFormData | EditingFormData) => {
@@ -939,6 +999,9 @@ export default function HomePage() {
                                 moderation={genModeration}
                                 setModeration={setGenModeration}
                                 streamingAllowed={genN[0] === 1}
+                                onEnhancePrompt={() => handlePromptEnhance('generate')}
+                                isEnhancingPrompt={isEnhancingGenPrompt}
+                                enhanceError={genPromptEnhanceError}
                             />
                         </div>
                         <div className={mode === 'edit' ? 'block h-full w-full' : 'hidden'}>
@@ -980,6 +1043,9 @@ export default function HomePage() {
                                 editMaskPreviewUrl={editMaskPreviewUrl}
                                 setEditMaskPreviewUrl={setEditMaskPreviewUrl}
                                 streamingAllowed={editN[0] === 1}
+                                onEnhancePrompt={() => handlePromptEnhance('edit')}
+                                isEnhancingPrompt={isEnhancingEditPrompt}
+                                enhanceError={editPromptEnhanceError}
                             />
                         </div>
                     </div>

@@ -39,6 +39,7 @@ A web-based playground to interact with OpenAI's GPT image models (`gpt-image-1`
 *   **🖼️ Flexible Image Output View:** View generated image batches as a grid or select individual images for a closer look.
 *   **🚀 Send to Edit:** Quickly send any generated or history image directly to the editing form.
 *   **📋 Paste to Edit:** Paste images directly from your clipboard into the Edit mode's source image area.
+*   **✨ Prompt Auto-Enhance:** Refine generate and edit prompts with GPT-5.2 Chat before sending them to the image API.
 *   **💾 Storage:** Supports two modes via `NEXT_PUBLIC_IMAGE_STORAGE_MODE`:
     *   **Filesystem (default):** Images saved to `./generated-images` on the server.
     *   **IndexedDB:** Images saved directly in the browser's IndexedDB (ideal for serverless deployments).
@@ -50,7 +51,7 @@ A web-based playground to interact with OpenAI's GPT image models (`gpt-image-1`
 
 You can deploy your own instance of this playground to Vercel with one click:
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/alasano/gpt-image-1-playground&env=OPENAI_API_KEY,NEXT_PUBLIC_IMAGE_STORAGE_MODE,APP_PASSWORD&envDescription=OpenAI%20API%20Key%20is%20required.%20Set%20storage%20mode%20to%20indexeddb%20for%20Vercel%20deployments.&project-name=gpt-image-playground&repository-name=gpt-image-playground)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/illgitthat/gpt-image-1-playground&env=OPENAI_API_KEY,NEXT_PUBLIC_IMAGE_STORAGE_MODE,APP_PASSWORD&envDescription=OpenAI%20API%20Key%20is%20required.%20Set%20storage%20mode%20to%20indexeddb%20for%20Vercel%20deployments.&project-name=gpt-image-playground&repository-name=gpt-image-playground)
 
 You will be prompted to enter your `OPENAI_API_KEY` and `APP_PASSWORD` during the deployment setup. For Vercel deployments, it's required to set `NEXT_PUBLIC_IMAGE_STORAGE_MODE` to `indexeddb`.
 
@@ -121,6 +122,20 @@ When this variable is set to `indexeddb`:
 If this variable is **not set** or has any other value, the application defaults to the standard behavior of saving images to the `./generated-images` directory on the server's filesystem.
 
 **Note:** If `NEXT_PUBLIC_IMAGE_STORAGE_MODE` is not set, the application will automatically detect if it's running on Vercel (using the `VERCEL` or `NEXT_PUBLIC_VERCEL_ENV` environment variables) and default to `indexeddb` mode in that case. Otherwise (e.g., running locally), it defaults to `fs` mode. You can always explicitly set the variable to `fs` or `indexeddb` to override this automatic behavior.
+
+#### 🟡 (Optional) Prompt Auto-Enhance
+
+Auto-polish prompts with a chat model before calling the image API. Defaults use `gpt-5.2-chat` on OpenAI.
+
+```dotenv
+# Override the chat model used to enhance prompts (default: gpt-5.2-chat)
+PROMPT_ENHANCE_MODEL=gpt-5.2-chat
+
+# If using Azure, provide a dedicated deployment name for the enhancer (falls back to AZURE_OPENAI_DEPLOYMENT_NAME)
+AZURE_OPENAI_PROMPT_ENHANCE_DEPLOYMENT_NAME=your_chat_deployment
+```
+
+---
 
 #### 🟡 (Optional) Use a Custom API Endpoint
 
