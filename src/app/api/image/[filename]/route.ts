@@ -1,16 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
-import path from 'path';
 import { lookup } from 'mime-types';
+import { NextRequest, NextResponse } from 'next/server';
+import path from 'path';
 
 // Base directory where images are stored (outside gpt-image-playground)
 const imageBaseDir = path.resolve(process.cwd(), 'generated-images');
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ filename: string }> }
-) {
-
+export async function GET(request: NextRequest, { params }: { params: Promise<{ filename: string }> }) {
   const { filename } = await params;
 
   if (!filename) {
@@ -35,10 +31,9 @@ export async function GET(
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Content-Length': fileBuffer.length.toString(),
-      },
+        'Content-Length': fileBuffer.length.toString()
+      }
     });
-
   } catch (error: unknown) {
     console.error(`Error serving image ${filename}:`, error);
     if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
