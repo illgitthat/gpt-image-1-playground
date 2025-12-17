@@ -1,5 +1,3 @@
-import withNext from "next/eslint";
+import nextConfig from "eslint-config-next";
 
-export default withNext({
-  extends: ["next/core-web-vitals", "next/typescript"],
-});
+export default nextConfig;
