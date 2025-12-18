@@ -46,6 +46,7 @@ type DrawnPoint = {
 };
 
 const MAX_EDIT_IMAGES = 10;
+const MAX_PROMPT_ENHANCE_IMAGES = 3;
 
 const explicitModeClient = process.env.NEXT_PUBLIC_IMAGE_STORAGE_MODE;
 
@@ -356,6 +357,21 @@ export default function HomePage() {
         return 'image/png';
     };
 
+    const fileToDataUrl = React.useCallback((file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                if (typeof reader.result === 'string') {
+                    resolve(reader.result);
+                } else {
+                    reject(new Error('Failed to read file as data URL.'));
+                }
+            };
+            reader.onerror = () => reject(reader.error ?? new Error('Unknown file read error.'));
+            reader.readAsDataURL(file);
+        });
+    }, []);
+
     const handlePromptEnhance = async (targetMode: 'generate' | 'edit' | 'video') => {
         const isGenerate = targetMode === 'generate';
         const isEdit = targetMode === 'edit';
@@ -387,6 +403,47 @@ export default function HomePage() {
         setEnhanceError(null);
         setLoading(true);
 
+        let referenceImagesPayload: { dataUrl: string; alt?: string }[] = [];
+        let videoHasReferenceImage = false;
+
+        if (targetMode === 'edit' && editImageFiles.length > 0) {
+            try {
+                const filesToSend = editImageFiles.slice(0, MAX_PROMPT_ENHANCE_IMAGES);
+                referenceImagesPayload = await Promise.all(
+                    filesToSend.map(async (file, index) => ({
+                        dataUrl: await fileToDataUrl(file),
+                        alt: `Reference image ${index + 1} for edit${file.name ? ` (${file.name})` : ''}`
+                    }))
+                );
+            } catch (readError) {
+                const message =
+                    readError instanceof Error
+                        ? readError.message
+                        : 'Failed to attach reference images for prompt enhancement.';
+                setEnhanceError(message);
+                setLoading(false);
+                return;
+            }
+        } else if (targetMode === 'video' && videoReferenceImage) {
+            try {
+                videoHasReferenceImage = true;
+                referenceImagesPayload = [
+                    {
+                        dataUrl: await fileToDataUrl(videoReferenceImage),
+                        alt: `Reference frame for video${videoReferenceImage.name ? ` (${videoReferenceImage.name})` : ''}`
+                    }
+                ];
+            } catch (readError) {
+                const message =
+                    readError instanceof Error
+                        ? readError.message
+                        : 'Failed to attach reference image for prompt enhancement.';
+                setEnhanceError(message);
+                setLoading(false);
+                return;
+            }
+        }
+
         try {
             const response = await fetch('/api/prompt-enhance', {
                 method: 'POST',
@@ -394,7 +451,9 @@ export default function HomePage() {
                 body: JSON.stringify({
                     prompt: targetPrompt,
                     mode: targetMode,
-                    passwordHash: isPasswordRequiredByBackend ? clientPasswordHash : undefined
+                    passwordHash: isPasswordRequiredByBackend ? clientPasswordHash : undefined,
+                    referenceImages: referenceImagesPayload.length ? referenceImagesPayload : undefined,
+                    videoHasReferenceImage: targetMode === 'video' ? videoHasReferenceImage : undefined
                 })
             });
 

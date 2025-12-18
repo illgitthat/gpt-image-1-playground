@@ -1,4 +1,4 @@
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import type { ChatCompletionContentPart, ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 
 const generateSystemPrompt = `You are an expert prompt engineer for a general-purpose text-to-image model. Rewrite the user's request into a single, highly effective prompt that works across many use cases (photorealism, illustration, logos, UI mockups, infographics, product shots, style transfer).
 
@@ -31,7 +31,7 @@ Guidelines:
 Example Input: "Make the dog a cat"
 Example Output: "Change only the dog into a fluffy Siamese cat sitting in the same spot, matching the original lighting and perspective. Keep everything else the same."`;
 
-const videoSystemPrompt = `You are an expert prompt engineer for image-to-video generation (Sora 2) using a single reference frame. Rewrite the user's request into a concise, actionable video directive that keeps fidelity to the reference image while describing motion.
+const videoWithReferenceSystemPrompt = `You are an expert prompt engineer for image-to-video generation (Sora 2) using a single reference frame. Rewrite the user's request into a concise, actionable video directive that keeps fidelity to the reference image while describing motion.
 
 Rules:
 - Return ONLY the raw prompt text (no markdown, no labels, no quotes around the whole prompt).
@@ -42,17 +42,76 @@ Rules:
 - Avoid inventing new objects or characters not present/expected; stay faithful to the reference composition.
 `;
 
-export function buildPromptEnhanceMessages(mode: 'generate' | 'edit' | 'video', prompt: string): ChatCompletionMessageParam[] {
-    const systemPrompt = mode === 'edit' ? editSystemPrompt : mode === 'video' ? videoSystemPrompt : generateSystemPrompt;
+const videoPromptOnlySystemPrompt = `You are an expert prompt engineer for prompt-to-video generation (Sora 2) with no reference image. Rewrite the user's request into a clear, visual directive that establishes scene, motion, and camera.
+
+Rules:
+- Return ONLY the raw prompt text (no markdown, no labels, no quotes around the whole prompt).
+- Describe scene/background → subjects → motion beats (order, speed, direction) → camera (pan/tilt/dolly/zoom, stability) → lighting/mood → style/medium → constraints.
+- Keep it concise (40–90 words), cinematic or clearly styled per user intent; avoid filler quality terms.
+- If text appears on screen, include it in "QUOTES" with typography notes (placement, size, contrast).
+- Do not invent factual details the user did not imply; stay faithful to their intent.
+`;
+
+export type PromptEnhanceImagePayload = {
+    dataUrl: string;
+    alt?: string;
+};
+
+export type BuildPromptEnhanceOptions = {
+    referenceImages?: PromptEnhanceImagePayload[];
+    videoHasReferenceImage?: boolean;
+};
+
+export function buildPromptEnhanceMessages(
+    mode: 'generate' | 'edit' | 'video',
+    prompt: string,
+    options?: BuildPromptEnhanceOptions
+): ChatCompletionMessageParam[] {
+    const systemPrompt =
+        mode === 'edit'
+            ? editSystemPrompt
+            : mode === 'video'
+                ? options?.videoHasReferenceImage
+                    ? videoWithReferenceSystemPrompt
+                    : videoPromptOnlySystemPrompt
+                : generateSystemPrompt;
+
+    const hasReferenceImages = Array.isArray(options?.referenceImages) && options?.referenceImages.length > 0;
+
+    const userContent: ChatCompletionContentPart[] | string = hasReferenceImages
+        ? options!.referenceImages!.reduce<ChatCompletionContentPart[]>(
+            (acc, img, index) => {
+                if (index === 0) {
+                    acc.push({ type: 'text', text: prompt });
+                }
+
+                if (img.alt) {
+                    acc.push({ type: 'text', text: `Reference image ${index + 1}: ${img.alt}` });
+                }
+
+                acc.push({
+                    type: 'image_url',
+                    image_url: {
+                        url: img.dataUrl,
+                        detail: 'low'
+                    }
+                });
+
+                return acc;
+            },
+            []
+        )
+        : prompt;
 
     return [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt }
+        { role: 'user', content: userContent }
     ];
 }
 
 export const promptEnhanceTemplates = {
     generateSystemPrompt,
     editSystemPrompt,
-    videoSystemPrompt
+    videoSystemPrompt: videoWithReferenceSystemPrompt,
+    videoPromptOnlySystemPrompt
 };
