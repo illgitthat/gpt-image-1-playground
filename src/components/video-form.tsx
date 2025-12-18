@@ -236,7 +236,14 @@ export function VideoForm({
                             disabled={isLoading}
                             className='min-h-[80px] rounded-md border border-white/20 bg-black text-white placeholder:text-white/40 focus:border-white/50 focus:ring-white/50'
                         />
-                        <p className='text-xs text-white/50'>Note: Sora video generation can take 1–2 minutes. Keep this tab open.</p>
+                        <div className='rounded-md border border-white/10 bg-white/5 p-3 text-xs'>
+                            <p className='text-white/60'>
+                                <span className='font-medium text-white/80'>Note:</span> Sora video generation takes 1–2 minutes. Keep this tab open.
+                            </p>
+                            <p className='mt-1 text-amber-200/80'>
+                                <span className='font-medium text-amber-200'>Policy:</span> Sora 2 blocks all IP and photorealistic content.
+                            </p>
+                        </div>
                     </div>
 
                     <div className='space-y-3'>
@@ -347,7 +354,7 @@ export function VideoForm({
 
                     <div className='space-y-2'>
                         <Label htmlFor='video-seconds-slider' className='text-white'>
-                            Duration: {seconds[0]}s (allowed: 4, 8, 12)
+                            Duration: {seconds[0]}s
                         </Label>
                         <Slider
                             id='video-seconds-slider'
@@ -359,7 +366,7 @@ export function VideoForm({
                             disabled={isLoading}
                             className='mt-3 [&>button]:border-black [&>button]:bg-white [&>button]:ring-offset-black [&>span:first-child]:h-1 [&>span:first-child>span]:bg-white'
                         />
-                        <p className='text-xs text-white/60'>Sora accepts 4s, 8s, or 12s clips; choose one of these durations.</p>
+                        <p className='text-xs text-white/60'>Sora accepts 4s, 8s, or 12s clips.</p>
                     </div>
                 </CardContent>
                 <CardFooter className='border-t border-white/10 p-4'>
