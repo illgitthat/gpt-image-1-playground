@@ -1,12 +1,44 @@
-# <img src="./public/favicon.svg" alt="Project Logo" width="30" height="30" style="vertical-align: middle; margin-right: 8px;"> GPT Image Playground
+# <img src="./public/favicon.svg" alt="Project Logo" width="30" height="30" style="vertical-align: middle; margin-right: 8px;"> GPT Image/Video Playground
 
-A web-based playground to interact with OpenAI's GPT image models (`gpt-image-1`, `gpt-image-1-mini`, and `gpt-image-1.5`) for generating and editing images. Supports both the standard OpenAI API and Azure OpenAI deployments.
+A web-based playground to interact with OpenAI's GPT image models (`gpt-image-1`, `gpt-image-1-mini`, and `gpt-image-1.5`) for generating and editing images, plus **Sora 2** for AI video generation. Supports both the standard OpenAI API and Azure OpenAI deployments.
 
 > **Note:** The playground defaults to `gpt-image-1.5`, OpenAI's latest and most capable image model with improved quality at lower cost.
 
 <p align="center">
   <img src="./readme-images/interface.jpg" alt="Interface" width="600"/>
 </p>
+
+## 📑 Table of Contents
+
+- [Features](#-features)
+- [Quick Start](#-quick-start)
+- [Deploy to Vercel](#-deploy-to-vercel)
+- [Local Deployment](#-local-deployment)
+  - [Prerequisites](#prerequisites)
+  - [API Key Setup](#1-set-up-api-key-)
+  - [Optional Configuration](#-optional-configuration)
+  - [Install & Run](#2-install-dependencies-)
+- [Production Run](#-production-run-bun--pm2)
+- [Contributing](#-contributing)
+- [License](#-license)
+
+## ⚡ Quick Start
+
+```bash
+# 1. Clone and enter the repo
+git clone https://github.com/alasano/gpt-image-1-playground.git
+cd gpt-image-1-playground
+
+# 2. Set up your environment variables
+cp .env.local.example .env.local
+# Then edit .env.local with your API key(s)
+
+# 3. Install and run
+bun install
+bun run dev
+```
+
+Then open [http://localhost:3000](http://localhost:3000) 🎉
 
 ## ✨ Features
 
@@ -54,24 +86,22 @@ You can deploy your own instance of this playground to Vercel with one click:
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/illgitthat/gpt-image-1-playground&env=OPENAI_API_KEY,NEXT_PUBLIC_IMAGE_STORAGE_MODE,APP_PASSWORD&envDescription=OpenAI%20API%20Key%20is%20required.%20Set%20storage%20mode%20to%20indexeddb%20for%20Vercel%20deployments.&project-name=gpt-image-playground&repository-name=gpt-image-playground)
 
-You will be prompted to enter your `OPENAI_API_KEY` and `APP_PASSWORD` during the deployment setup. For Vercel deployments, it's required to set `NEXT_PUBLIC_IMAGE_STORAGE_MODE` to `indexeddb`.
+You will be prompted to enter your `OPENAI_API_KEY` and `APP_PASSWORD` during the deployment setup. The app will automatically use `indexeddb` storage mode on Vercel.
 
-Note: If `NEXT_PUBLIC_IMAGE_STORAGE_MODE` is not set, the application will automatically detect if it's running on Vercel (using the `VERCEL` or `NEXT_PUBLIC_VERCEL_ENV` environment variables) and default to `indexeddb` mode in that case. Otherwise (e.g., running locally), it defaults to `fs` mode. You can always explicitly set the variable to `fs` or `indexeddb` to override this automatic behavior.
-
-## 🚀 Getting Started [Local Deployment]
+## 🚀 Local Deployment
 
 Follow these steps to get the playground running locally.
 
 ### Prerequisites
 
 *   [Node.js](https://nodejs.org/) (Version 20 or later required)
-*   [npm](https://www.npmjs.com/), [yarn](https://yarnpkg.com/), [pnpm](https://pnpm.io/), or [bun](https://bun.sh/)
+*   [Bun](https://bun.sh/) (recommended) or [npm](https://www.npmjs.com/)
 
 ### 1. Set Up API Key 🟢
 
-You need an API key to use this application. You can configure it to use either a standard OpenAI API key or an Azure OpenAI deployment. \
-\
-⚠️ [Your OpenAI Organization needs to be verified to use `gpt-image-1`](https://help.openai.com/en/articles/10910291-api-organization-verification)
+You need an API key to use this application. You can configure it to use either a standard OpenAI API key or an Azure OpenAI deployment.
+
+> ⚠️ [Your OpenAI Organization needs to be verified to use `gpt-image-1`](https://help.openai.com/en/articles/10910291-api-organization-verification)
 
 **Option 1: Standard OpenAI API Key**
 
@@ -102,95 +132,83 @@ You need an API key to use this application. You can configure it to use either 
 
 The application will automatically detect if the Azure environment variables (`AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT_NAME`, `AZURE_OPENAI_API_VERSION`) are set in `.env.local`. If they are, it will use the Azure OpenAI client. Otherwise, it will fall back to using the standard OpenAI client if `OPENAI_API_KEY` is set.
 
-**Important:** Keep your API keys and endpoint information secret. The `.env.local` file is included in `.gitignore` by default to prevent accidental commits.
+> **Important:** Keep your API keys secret. The `.env.local` file is included in `.gitignore` by default.
 
----
+### 🟡 Optional Configuration
 
-#### 🟡 (Optional) IndexedDB Mode (for serverless hosts) [e.g. Vercel]
+<details>
+<summary><strong>IndexedDB Mode</strong> (for serverless hosts like Vercel)</summary>
 
-For environments where the filesystem is read-only or ephemeral (like Vercel serverless functions), you can configure the application to store generated images directly in the browser's IndexedDB using Dexie.js.
-
-Set the following environment variable in your `.env.local` file or directly in your hosting provider's UI (like Vercel):
+For environments where the filesystem is read-only or ephemeral, images can be stored in the browser's IndexedDB:
 
 ```dotenv
 NEXT_PUBLIC_IMAGE_STORAGE_MODE=indexeddb
 ```
 
-When this variable is set to `indexeddb`:
-*   The server API (`/api/images`) will return the image data as base64 (`b64_json`) instead of saving it to disk.
-*   The client-side application will decode the base64 data and store the image blob in IndexedDB.
-*   Images will be served directly from the browser's storage using Blob URLs.
+> **Note:** The app auto-detects Vercel and defaults to `indexeddb` mode. For local development, it defaults to `fs` (filesystem).
 
-If this variable is **not set** or has any other value, the application defaults to the standard behavior of saving images to the `./generated-images` directory on the server's filesystem.
+</details>
 
-**Note:** If `NEXT_PUBLIC_IMAGE_STORAGE_MODE` is not set, the application will automatically detect if it's running on Vercel (using the `VERCEL` or `NEXT_PUBLIC_VERCEL_ENV` environment variables) and default to `indexeddb` mode in that case. Otherwise (e.g., running locally), it defaults to `fs` mode. You can always explicitly set the variable to `fs` or `indexeddb` to override this automatic behavior.
+<details>
+<summary><strong>Prompt Auto-Enhance</strong></summary>
 
-#### 🟡 (Optional) Prompt Auto-Enhance
-
-Auto-polish prompts with a chat model before calling the image API. Defaults use `gpt-5.2-chat` on OpenAI.
+Auto-polish prompts with a chat model before calling the image API:
 
 ```dotenv
-# Override the chat model used to enhance prompts (default: gpt-5.2-chat)
+# Override the chat model (default: gpt-5.2-chat)
 PROMPT_ENHANCE_MODEL=gpt-5.2-chat
 
-# If using Azure, provide a dedicated deployment name for the enhancer (falls back to AZURE_OPENAI_DEPLOYMENT_NAME)
+# For Azure, specify a chat deployment
 AZURE_OPENAI_PROMPT_ENHANCE_DEPLOYMENT_NAME=your_chat_deployment
 ```
 
----
+</details>
 
-#### 🟡 (Optional) Use a Custom API Endpoint
+<details>
+<summary><strong>Custom API Endpoint</strong></summary>
 
-If you need to use an OpenAI-compatible API endpoint (e.g., a local model server or a different provider), you can specify its base URL using the `OPENAI_API_BASE_URL` environment variable in your `.env.local` file:
+Use an OpenAI-compatible API endpoint:
 
 ```dotenv
-OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_API_BASE_URL=your_compatible_api_endpoint_here
 ```
 
-If `OPENAI_API_BASE_URL` is not set, the application will default to the standard OpenAI API endpoint.
+</details>
 
----
+<details>
+<summary><strong>Password Protection</strong></summary>
 
-
-#### 🟡 (Optional) Enable Password Validation
 ```dotenv
 APP_PASSWORD=your_password_here
 ```
-When `APP_PASSWORD` is set, the frontend will prompt you for a password to authenticate requests.
+
+When set, users must enter the password to access the playground.
+
 <p align="center">
   <img src="./readme-images/password-dialog.jpg" alt="Password Dialog" width="460"/>
 </p>
 
----
+</details>
 
 ### 2. Install Dependencies 🟢
 
 Navigate to the project directory in your terminal and install the necessary packages:
 
 ```bash
-npm install
-# or
-# yarn install
-# or
-# pnpm install
-# or
-# bun install
+bun install
 ```
+
+> **Note:** You can also use `npm install` if you prefer npm.
 
 ### 3. Run the Development Server 🟢
 
 Start the Next.js development server:
 
 ```bash
-npm run dev
-# or
-# yarn dev
-# or
-# pnpm dev
-# or
-# bun dev
+bun run dev
 ```
+
+> **Note:** You can also use `npm run dev` if you prefer npm.
 
 ### 4. Open the Playground 🟢
 
