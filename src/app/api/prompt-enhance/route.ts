@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
         const prompt = (body?.prompt as string | undefined)?.trim();
-        const mode = body?.mode as 'generate' | 'edit' | undefined;
+        const mode = body?.mode as 'generate' | 'edit' | 'video' | undefined;
         const clientPasswordHash = body?.passwordHash as string | undefined;
 
         if (!prompt || !mode) {

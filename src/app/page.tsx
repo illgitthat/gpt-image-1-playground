@@ -5,6 +5,8 @@ import { GenerationForm, type GenerationFormData } from '@/components/generation
 import { HistoryPanel } from '@/components/history-panel';
 import { ImageOutput } from '@/components/image-output';
 import { PasswordDialog } from '@/components/password-dialog';
+import { VideoForm, type VideoFormData } from '@/components/video-form';
+import { VideoOutput } from '@/components/video-output';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { calculateApiCost, type CostDetails } from '@/lib/cost-utils';
 import { db, type ImageRecord } from '@/lib/db';
@@ -15,19 +17,26 @@ type HistoryImage = {
     filename: string;
 };
 
+type HistoryVideo = {
+    filename: string;
+};
+
 export type HistoryMetadata = {
     timestamp: number;
-    images: HistoryImage[];
+    images?: HistoryImage[];
+    videos?: HistoryVideo[];
     storageModeUsed?: 'fs' | 'indexeddb';
     durationMs: number;
     quality: GenerationFormData['quality'];
     background: GenerationFormData['background'];
     moderation: GenerationFormData['moderation'];
     prompt: string;
-    mode: 'generate' | 'edit';
+    mode: 'generate' | 'edit' | 'video';
     costDetails: CostDetails | null;
     output_format?: GenerationFormData['output_format'];
     model?: 'gpt-image-1' | 'gpt-image-1-mini' | 'gpt-image-1.5';
+    videoSize?: '1280x720' | '720x1280';
+    videoSeconds?: number;
 };
 
 type DrawnPoint = {
@@ -66,7 +75,7 @@ type ApiImageResponseItem = {
 };
 
 export default function HomePage() {
-    const [mode, setMode] = React.useState<'generate' | 'edit'>('generate');
+    const [mode, setMode] = React.useState<'generate' | 'edit' | 'video'>('generate');
     const [isPasswordRequiredByBackend, setIsPasswordRequiredByBackend] = React.useState<boolean | null>(null);
     const [clientPasswordHash, setClientPasswordHash] = React.useState<string | null>(null);
     const [isLoading, setIsLoading] = React.useState(false);
@@ -118,13 +127,26 @@ export default function HomePage() {
 
     const [editModel, setEditModel] = React.useState<EditingFormData['model']>('gpt-image-1.5');
 
+    const [videoPrompt, setVideoPrompt] = React.useState('');
+    const [videoSize, setVideoSize] = React.useState<'1280x720' | '720x1280'>('1280x720');
+    const [videoSeconds, setVideoSeconds] = React.useState([8]);
+    const [videoReferenceImage, setVideoReferenceImage] = React.useState<File | null>(null);
+    const [videoReferencePreviewUrl, setVideoReferencePreviewUrl] = React.useState<string | null>(null);
+    const [isGeneratingVideo, setIsGeneratingVideo] = React.useState(false);
+    const [latestVideoBatch, setLatestVideoBatch] = React.useState<{ path: string; filename: string }[] | null>(null);
+    const [videoViewIndex, setVideoViewIndex] = React.useState(0);
+    const [isEnhancingVideoPrompt, setIsEnhancingVideoPrompt] = React.useState(false);
+    const [videoPromptEnhanceError, setVideoPromptEnhanceError] = React.useState<string | null>(null);
+
     // Streaming previews are on by default (auto-disabled when multiple images are requested)
     const [partialImages] = React.useState<1 | 2 | 3>(3);
     // Streaming preview images (base64 data URLs for partial images during streaming)
     const [streamingPreviewImages, setStreamingPreviewImages] = React.useState<Map<number, string>>(new Map());
 
     const isStreamingAllowed = React.useMemo(() => {
-        return mode === 'generate' ? genN[0] === 1 : editN[0] === 1;
+        if (mode === 'generate') return genN[0] === 1;
+        if (mode === 'edit') return editN[0] === 1;
+        return false;
     }, [mode, genN, editN]);
 
     const getImageSrc = React.useCallback(
@@ -155,6 +177,14 @@ export default function HomePage() {
             });
         };
     }, [blobUrlCache]);
+
+    React.useEffect(() => {
+        return () => {
+            if (videoReferencePreviewUrl && videoReferencePreviewUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(videoReferencePreviewUrl);
+            }
+        };
+    }, [videoReferencePreviewUrl]);
 
     React.useEffect(() => {
         return () => {
@@ -317,12 +347,21 @@ export default function HomePage() {
         return 'image/png';
     };
 
-    const handlePromptEnhance = async (targetMode: 'generate' | 'edit') => {
+    const handlePromptEnhance = async (targetMode: 'generate' | 'edit' | 'video') => {
         const isGenerate = targetMode === 'generate';
-        const targetPrompt = isGenerate ? genPrompt : editPrompt;
-        const setLoading = isGenerate ? setIsEnhancingGenPrompt : setIsEnhancingEditPrompt;
-        const setPrompt = isGenerate ? setGenPrompt : setEditPrompt;
-        const setEnhanceError = isGenerate ? setGenPromptEnhanceError : setEditPromptEnhanceError;
+        const isEdit = targetMode === 'edit';
+        const targetPrompt = isGenerate ? genPrompt : isEdit ? editPrompt : videoPrompt;
+        const setLoading = isGenerate
+            ? setIsEnhancingGenPrompt
+            : isEdit
+                ? setIsEnhancingEditPrompt
+                : setIsEnhancingVideoPrompt;
+        const setPrompt = isGenerate ? setGenPrompt : isEdit ? setEditPrompt : setVideoPrompt;
+        const setEnhanceError = isGenerate
+            ? setGenPromptEnhanceError
+            : isEdit
+                ? setEditPromptEnhanceError
+                : setVideoPromptEnhanceError;
 
         if (!targetPrompt.trim()) {
             setEnhanceError('Add a prompt first.');
@@ -370,6 +409,90 @@ export default function HomePage() {
             setEnhanceError(message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleVideoSubmit = async (formData: VideoFormData) => {
+        const startTime = Date.now();
+        setIsGeneratingVideo(true);
+        setError(null);
+        setLatestVideoBatch(null);
+        setVideoViewIndex(0);
+
+        if (!formData.referenceImage) {
+            setError('Reference image is required for Sora.');
+            setIsGeneratingVideo(false);
+            return;
+        }
+
+        if (isPasswordRequiredByBackend && !clientPasswordHash) {
+            setError('Password is required. Please configure the password by clicking the lock icon.');
+            setPasswordDialogContext('initial');
+            setIsPasswordDialogOpen(true);
+            setIsGeneratingVideo(false);
+            return;
+        }
+
+        const apiFormData = new FormData();
+        apiFormData.append('prompt', formData.prompt);
+        apiFormData.append('size', formData.size);
+        apiFormData.append('seconds', formData.seconds.toString());
+        apiFormData.append('reference_image', formData.referenceImage, formData.referenceImage.name);
+
+        if (isPasswordRequiredByBackend && clientPasswordHash) {
+            apiFormData.append('passwordHash', clientPasswordHash);
+        }
+
+        try {
+            const response = await fetch('/api/video', {
+                method: 'POST',
+                body: apiFormData
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                if (response.status === 401 && isPasswordRequiredByBackend) {
+                    setError('Unauthorized: Invalid or missing password. Please try again.');
+                    setPasswordDialogContext('retry');
+                    setIsPasswordDialogOpen(true);
+                    return;
+                }
+                throw new Error(result.error || `Video API request failed with status ${response.status}`);
+            }
+
+            if (result.videos && result.videos.length > 0) {
+                const durationMs = Date.now() - startTime;
+                setLatestVideoBatch(result.videos);
+                setMode('video');
+
+                const batchTimestamp = Date.now();
+                const newHistoryEntry: HistoryMetadata = {
+                    timestamp: batchTimestamp,
+                    videos: result.videos.map((vid: { filename: string }) => ({ filename: vid.filename })),
+                    storageModeUsed: 'fs',
+                    durationMs,
+                    quality: 'auto',
+                    background: 'auto',
+                    moderation: 'auto',
+                    prompt: formData.prompt,
+                    mode: 'video',
+                    costDetails: null,
+                    videoSize: formData.size,
+                    videoSeconds: formData.seconds,
+                    model: result.model || 'sora-2'
+                };
+
+                setHistory((prevHistory) => [newHistoryEntry, ...prevHistory]);
+            } else {
+                throw new Error('Video API response did not contain a video.');
+            }
+        } catch (err: unknown) {
+            const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while creating video.';
+            setError(errorMessage);
+            setLatestVideoBatch(null);
+        } finally {
+            setIsGeneratingVideo(false);
         }
     };
 
@@ -747,39 +870,49 @@ export default function HomePage() {
             `Selecting history item from ${new Date(item.timestamp).toISOString()}, stored via: ${item.storageModeUsed}`
         );
         const originalStorageMode = item.storageModeUsed || 'fs';
+        const isVideoEntry = item.mode === 'video';
+        const assets = item.videos && item.videos.length > 0 ? item.videos : item.images || [];
 
-        const selectedBatchPromises = item.images.map(async (imgInfo) => {
+        const selectedBatchPromises = assets.map(async (asset) => {
             let path: string | undefined;
+
             if (originalStorageMode === 'indexeddb') {
-                path = getImageSrc(imgInfo.filename);
+                path = getImageSrc(asset.filename);
             } else {
-                path = `/api/image/${imgInfo.filename}`;
+                path = `/api/image/${asset.filename}`;
             }
 
             if (path) {
-                return { path, filename: imgInfo.filename };
+                return { path, filename: asset.filename };
             } else {
                 console.warn(
-                    `Could not get image source for history item: ${imgInfo.filename} (mode: ${originalStorageMode})`
+                    `Could not get asset source for history item: ${asset.filename} (mode: ${originalStorageMode})`
                 );
-                setError(`Image ${imgInfo.filename} could not be loaded.`);
+                setError(`Asset ${asset.filename} could not be loaded.`);
                 return null;
             }
         });
 
         Promise.all(selectedBatchPromises).then((resolvedBatch) => {
-            const validImages = resolvedBatch.filter(Boolean) as { path: string; filename: string }[];
+            const validAssets = resolvedBatch.filter(Boolean) as { path: string; filename: string }[];
 
-            if (validImages.length !== item.images.length && !error) {
+            if (validAssets.length !== assets.length && !error) {
                 setError(
-                    'Some images from this history entry could not be loaded (they might have been cleared or are missing).'
+                    'Some items from this history entry could not be loaded (they might have been cleared or are missing).'
                 );
-            } else if (validImages.length === item.images.length) {
+            } else if (validAssets.length === assets.length) {
                 setError(null);
             }
 
-            setLatestImageBatch(validImages.length > 0 ? validImages : null);
-            setImageOutputView(validImages.length > 1 ? 'grid' : 0);
+            if (isVideoEntry) {
+                setLatestVideoBatch(validAssets.length > 0 ? validAssets : null);
+                setMode('video');
+                setVideoViewIndex(0);
+            } else {
+                setLatestImageBatch(validAssets.length > 0 ? validAssets : null);
+                setImageOutputView(validAssets.length > 1 ? 'grid' : 0);
+                setMode(item.mode);
+            }
         });
     };
 
@@ -792,7 +925,9 @@ export default function HomePage() {
         if (window.confirm(confirmationMessage)) {
             setHistory([]);
             setLatestImageBatch(null);
+            setLatestVideoBatch(null);
             setImageOutputView('grid');
+            setVideoViewIndex(0);
             setError(null);
 
             try {
@@ -884,13 +1019,62 @@ export default function HomePage() {
         }
     };
 
+    const handleSendToVideo = async (filename: string) => {
+        if (isGeneratingVideo) return;
+        setIsGeneratingVideo(true);
+        setError(null);
+
+        try {
+            let blob: Blob | undefined;
+            let mimeType: string = 'image/png';
+
+            if (effectiveStorageModeClient === 'indexeddb') {
+                const record = allDbImages?.find((img) => img.filename === filename);
+                if (record?.blob) {
+                    blob = record.blob;
+                    mimeType = blob.type || mimeType;
+                } else {
+                    throw new Error(`Image ${filename} not found in local database.`);
+                }
+            } else {
+                const response = await fetch(`/api/image/${filename}`);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch image: ${response.statusText}`);
+                }
+                blob = await response.blob();
+                mimeType = response.headers.get('Content-Type') || mimeType;
+            }
+
+            if (!blob) {
+                throw new Error(`Could not retrieve image data for ${filename}.`);
+            }
+
+            const newFile = new File([blob], filename, { type: mimeType });
+            const previewUrl = URL.createObjectURL(blob);
+
+            if (videoReferencePreviewUrl && videoReferencePreviewUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(videoReferencePreviewUrl);
+            }
+
+            setVideoReferenceImage(newFile);
+            setVideoReferencePreviewUrl(previewUrl);
+            setMode('video');
+        } catch (err: unknown) {
+            console.error('Error sending image to video:', err);
+            const errorMessage = err instanceof Error ? err.message : 'Failed to send image to video form.';
+            setError(errorMessage);
+        } finally {
+            setIsGeneratingVideo(false);
+        }
+    };
+
     const executeDeleteItem = async (item: HistoryMetadata) => {
         if (!item) return;
         console.log(`Executing delete for history item timestamp: ${item.timestamp}`);
         setError(null); // Clear previous errors
 
-        const { images: imagesInEntry, storageModeUsed, timestamp } = item;
-        const filenamesToDelete = imagesInEntry.map((img) => img.filename);
+        const { images: imagesInEntry = [], videos: videosInEntry = [], storageModeUsed, timestamp } = item;
+        const filenamesToDelete = [...imagesInEntry, ...videosInEntry].map((asset) => asset.filename);
 
         try {
             if (storageModeUsed === 'indexeddb') {
@@ -1048,6 +1232,30 @@ export default function HomePage() {
                                 enhanceError={editPromptEnhanceError}
                             />
                         </div>
+                        <div className={mode === 'video' ? 'block h-full w-full' : 'hidden'}>
+                            <VideoForm
+                                onSubmit={handleVideoSubmit}
+                                isLoading={isGeneratingVideo}
+                                currentMode={mode}
+                                onModeChange={setMode}
+                                isPasswordRequiredByBackend={isPasswordRequiredByBackend}
+                                clientPasswordHash={clientPasswordHash}
+                                onOpenPasswordDialog={handleOpenPasswordDialog}
+                                prompt={videoPrompt}
+                                setPrompt={setVideoPrompt}
+                                size={videoSize}
+                                setSize={setVideoSize}
+                                seconds={videoSeconds}
+                                setSeconds={setVideoSeconds}
+                                referenceImage={videoReferenceImage}
+                                setReferenceImage={setVideoReferenceImage}
+                                referencePreviewUrl={videoReferencePreviewUrl}
+                                setReferencePreviewUrl={setVideoReferencePreviewUrl}
+                                onEnhancePrompt={() => handlePromptEnhance('video')}
+                                isEnhancingPrompt={isEnhancingVideoPrompt}
+                                enhanceError={videoPromptEnhanceError}
+                            />
+                        </div>
                     </div>
                     <div className='flex h-[70vh] min-h-[600px] flex-col lg:col-span-1'>
                         {error && (
@@ -1056,17 +1264,27 @@ export default function HomePage() {
                                 <AlertDescription>{error}</AlertDescription>
                             </Alert>
                         )}
-                        <ImageOutput
-                            imageBatch={latestImageBatch}
-                            viewMode={imageOutputView}
-                            onViewChange={setImageOutputView}
-                            altText='Generated image output'
-                            isLoading={isLoading || isSendingToEdit}
-                            onSendToEdit={handleSendToEdit}
-                            currentMode={mode}
-                            baseImagePreviewUrl={editSourceImagePreviewUrls[0] || null}
-                            streamingPreviewImages={streamingPreviewImages}
-                        />
+                        {mode === 'video' ? (
+                            <VideoOutput
+                                videoBatch={latestVideoBatch}
+                                viewIndex={videoViewIndex}
+                                onViewChange={setVideoViewIndex}
+                                isLoading={isGeneratingVideo}
+                            />
+                        ) : (
+                                <ImageOutput
+                                    imageBatch={latestImageBatch}
+                                    viewMode={imageOutputView}
+                                    onViewChange={setImageOutputView}
+                                    altText='Generated image output'
+                                    isLoading={isLoading || isSendingToEdit}
+                                    onSendToEdit={handleSendToEdit}
+                                    currentMode={mode}
+                                    baseImagePreviewUrl={editSourceImagePreviewUrls[0] || null}
+                                    streamingPreviewImages={streamingPreviewImages}
+                                    onSendToVideo={handleSendToVideo}
+                                />
+                        )}
                     </div>
                 </div>
 

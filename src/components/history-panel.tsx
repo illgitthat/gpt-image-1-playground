@@ -186,19 +186,22 @@ export function HistoryPanel({
                 ) : (
                     <div className='grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'>
                         {[...history].map((item) => {
-                            const firstImage = item.images?.[0];
-                            const imageCount = item.images?.length ?? 0;
-                            const isMultiImage = imageCount > 1;
+                            const mediaItems = item.videos && item.videos.length > 0 ? item.videos : item.images;
+                            const firstMedia = mediaItems?.[0];
+                            const mediaCount = mediaItems?.length ?? 0;
+                            const isMultiImage = mediaCount > 1;
                             const itemKey = item.timestamp;
                             const originalStorageMode = item.storageModeUsed || 'fs';
                             const outputFormat = item.output_format || 'png';
 
+                            const isVideo = item.mode === 'video';
+
                             let thumbnailUrl: string | undefined;
-                            if (firstImage) {
+                            if (firstMedia) {
                                 if (originalStorageMode === 'indexeddb') {
-                                    thumbnailUrl = getImageSrc(firstImage.filename);
+                                    thumbnailUrl = getImageSrc(firstMedia.filename);
                                 } else {
-                                    thumbnailUrl = `/api/image/${firstImage.filename}`;
+                                    thumbnailUrl = `/api/image/${firstMedia.filename}`;
                                 }
                             }
 
@@ -210,14 +213,24 @@ export function HistoryPanel({
                                             className='relative block aspect-square w-full overflow-hidden rounded-t-md border border-white/20 transition-all duration-150 group-hover:border-white/40 focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black focus:outline-none'
                                             aria-label={`View image batch from ${new Date(item.timestamp).toLocaleString()}`}>
                                             {thumbnailUrl ? (
-                                                <Image
-                                                    src={thumbnailUrl}
-                                                    alt={`Preview for batch generated at ${new Date(item.timestamp).toLocaleString()}`}
-                                                    width={150}
-                                                    height={150}
-                                                    className='h-full w-full object-cover'
-                                                    unoptimized
-                                                />
+                                                isVideo ? (
+                                                    <video
+                                                        src={thumbnailUrl}
+                                                        muted
+                                                        playsInline
+                                                        loop
+                                                        className='h-full w-full object-cover'
+                                                    />
+                                                ) : (
+                                                        <Image
+                                                            src={thumbnailUrl}
+                                                            alt={`Preview for batch generated at ${new Date(item.timestamp).toLocaleString()}`}
+                                                            width={150}
+                                                            height={150}
+                                                            className='h-full w-full object-cover'
+                                                            unoptimized
+                                                        />
+                                                    )
                                             ) : (
                                                 <div className='flex h-full w-full items-center justify-center bg-neutral-800 text-neutral-500'>
                                                     ?
@@ -226,19 +239,25 @@ export function HistoryPanel({
                                             <div
                                                 className={cn(
                                                     'pointer-events-none absolute top-1 left-1 z-10 flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] text-white',
-                                                    item.mode === 'edit' ? 'bg-orange-600/80' : 'bg-blue-600/80'
+                                                    item.mode === 'edit'
+                                                        ? 'bg-orange-600/80'
+                                                        : item.mode === 'video'
+                                                            ? 'bg-purple-600/80'
+                                                            : 'bg-blue-600/80'
                                                 )}>
                                                 {item.mode === 'edit' ? (
                                                     <Pencil size={12} />
+                                                ) : item.mode === 'video' ? (
+                                                    <SparklesIcon size={12} />
                                                 ) : (
                                                     <SparklesIcon size={12} />
                                                 )}
-                                                {item.mode === 'edit' ? 'Edit' : 'Create'}
+                                                {item.mode === 'edit' ? 'Edit' : item.mode === 'video' ? 'Video' : 'Create'}
                                             </div>
                                             {isMultiImage && (
                                                 <div className='pointer-events-none absolute right-1 bottom-1 z-10 flex items-center gap-1 rounded-full bg-black/70 px-1.5 py-0.5 text-[12px] text-white'>
                                                     <Layers size={16} />
-                                                    {imageCount}
+                                                    {mediaCount}
                                                 </div>
                                             )}
                                             <div className='pointer-events-none absolute bottom-1 left-1 z-10 flex items-center gap-1'>
@@ -250,7 +269,7 @@ export function HistoryPanel({
                                                     )}
                                                     <span>{originalStorageMode === 'fs' ? 'file' : 'db'}</span>
                                                 </div>
-                                                {item.output_format && (
+                                                {item.output_format && !isVideo && (
                                                     <div className='flex items-center gap-1 rounded-full border border-white/10 bg-neutral-900/80 px-1 py-0.5 text-[11px] text-white/70'>
                                                         <FileImage size={12} className='text-neutral-400' />
                                                         <span>{outputFormat.toUpperCase()}</span>
@@ -374,17 +393,33 @@ export function HistoryPanel({
                                             {formatDuration(item.durationMs)}
                                         </p>
                                         <p>
-                                            <span className='font-medium text-white/80'>Model:</span> {item.model || 'gpt-image-1'}
+                                            <span className='font-medium text-white/80'>Model:</span>{' '}
+                                            {item.model || (isVideo ? 'sora-2' : 'gpt-image-1')}
                                         </p>
-                                        <p>
-                                            <span className='font-medium text-white/80'>Quality:</span> {item.quality}
-                                        </p>
-                                        <p>
-                                            <span className='font-medium text-white/80'>BG:</span> {item.background}
-                                        </p>
-                                        <p>
-                                            <span className='font-medium text-white/80'>Mod:</span> {item.moderation}
-                                        </p>
+                                        {isVideo ? (
+                                            <>
+                                                <p>
+                                                    <span className='font-medium text-white/80'>Resolution:</span>{' '}
+                                                    {item.videoSize}
+                                                </p>
+                                                <p>
+                                                    <span className='font-medium text-white/80'>Duration:</span>{' '}
+                                                    {item.videoSeconds ? `${item.videoSeconds}s` : '—'}
+                                                </p>
+                                            </>
+                                        ) : (
+                                            <>
+                                                    <p>
+                                                        <span className='font-medium text-white/80'>Quality:</span> {item.quality}
+                                                    </p>
+                                                    <p>
+                                                        <span className='font-medium text-white/80'>BG:</span> {item.background}
+                                                    </p>
+                                                    <p>
+                                                        <span className='font-medium text-white/80'>Mod:</span> {item.moderation}
+                                                    </p>
+                                            </>
+                                        )}
                                         <div className='mt-2 flex items-center gap-1'>
                                             <Dialog
                                                 open={openPromptDialogTimestamp === itemKey}
@@ -458,7 +493,7 @@ export function HistoryPanel({
                                                         </DialogTitle>
                                                         <DialogDescription className='pt-2 text-neutral-300'>
                                                             Are you sure you want to delete this history entry? This
-                                                            will remove {item.images.length} image(s). This action
+                                                            will remove {mediaCount} item(s). This action
                                                             cannot be undone.
                                                         </DialogDescription>
                                                     </DialogHeader>

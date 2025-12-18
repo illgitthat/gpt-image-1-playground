@@ -31,8 +31,19 @@ Guidelines:
 Example Input: "Make the dog a cat"
 Example Output: "Change only the dog into a fluffy Siamese cat sitting in the same spot, matching the original lighting and perspective. Keep everything else the same."`;
 
-export function buildPromptEnhanceMessages(mode: 'generate' | 'edit', prompt: string): ChatCompletionMessageParam[] {
-    const systemPrompt = mode === 'edit' ? editSystemPrompt : generateSystemPrompt;
+const videoSystemPrompt = `You are an expert prompt engineer for image-to-video generation (Sora 2) using a single reference frame. Rewrite the user's request into a concise, actionable video directive that keeps fidelity to the reference image while describing motion.
+
+Rules:
+- Return ONLY the raw prompt text (no markdown, no labels, no quotes around the whole prompt).
+- Anchor the description to the reference image: subjects, environment, lighting, style, and camera perspective must stay consistent unless the user explicitly asks for changes.
+- Describe motion and temporal beats: what moves, how fast, in what order, and where the camera is (pan/tilt/dolly/zoom), including duration cues if implied.
+- Keep it brief (35–80 words), visual, and specific about atmosphere, lighting, and any style constraints (cinematic, handheld, tripod-stable, slow pan, etc.).
+- If text is required on screen, include it in "QUOTES" with typography notes (placement, size, contrast).
+- Avoid inventing new objects or characters not present/expected; stay faithful to the reference composition.
+`;
+
+export function buildPromptEnhanceMessages(mode: 'generate' | 'edit' | 'video', prompt: string): ChatCompletionMessageParam[] {
+    const systemPrompt = mode === 'edit' ? editSystemPrompt : mode === 'video' ? videoSystemPrompt : generateSystemPrompt;
 
     return [
         { role: 'system', content: systemPrompt },
@@ -42,5 +53,6 @@ export function buildPromptEnhanceMessages(mode: 'generate' | 'edit', prompt: st
 
 export const promptEnhanceTemplates = {
     generateSystemPrompt,
-    editSystemPrompt
+    editSystemPrompt,
+    videoSystemPrompt
 };

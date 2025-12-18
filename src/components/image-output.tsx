@@ -17,9 +17,10 @@ type ImageOutputProps = {
     altText?: string;
     isLoading: boolean;
     onSendToEdit: (filename: string) => void;
-    currentMode: 'generate' | 'edit';
+    currentMode: 'generate' | 'edit' | 'video';
     baseImagePreviewUrl: string | null;
     streamingPreviewImages?: Map<number, string>;
+    onSendToVideo?: (filename: string) => void;
 };
 
 const getGridColsClass = (count: number): string => {
@@ -38,7 +39,8 @@ export function ImageOutput({
     onSendToEdit,
     currentMode,
     baseImagePreviewUrl,
-    streamingPreviewImages
+    streamingPreviewImages,
+    onSendToVideo
 }: ImageOutputProps) {
     const handleSendClick = () => {
         // Send to edit only works when a single image is selected
@@ -47,9 +49,16 @@ export function ImageOutput({
         }
     };
 
+    const handleSendToVideoClick = () => {
+        if (typeof viewMode === 'number' && imageBatch && imageBatch[viewMode] && onSendToVideo) {
+            onSendToVideo(imageBatch[viewMode].filename);
+        }
+    };
+
     const showCarousel = imageBatch && imageBatch.length > 1;
     const isSingleImageView = typeof viewMode === 'number';
     const canSendToEdit = !isLoading && isSingleImageView && imageBatch && imageBatch[viewMode];
+    const canSendToVideo = !isLoading && isSingleImageView && imageBatch && imageBatch[viewMode] && Boolean(onSendToVideo);
 
     return (
         <div className='flex h-full min-h-[300px] w-full flex-col items-center justify-between gap-4 overflow-hidden rounded-lg border border-white/20 bg-black p-4'>
@@ -184,19 +193,34 @@ export function ImageOutput({
                     </div>
                 )}
 
-                <Button
-                    variant='outline'
-                    size='sm'
-                    onClick={handleSendClick}
-                    disabled={!canSendToEdit}
-                    className={cn(
-                        'shrink-0 border-white/20 text-white/80 hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-50',
-                        // Hide button completely if grid view is active and there are multiple images
-                        showCarousel && viewMode === 'grid' ? 'invisible' : 'visible'
-                    )}>
-                    <Send className='mr-2 h-4 w-4' />
-                    Send to Edit
-                </Button>
+                <div className='flex items-center gap-2'>
+                    <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={handleSendClick}
+                        disabled={!canSendToEdit}
+                        className={cn(
+                            'shrink-0 border-white/20 text-white/80 hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-50',
+                            showCarousel && viewMode === 'grid' ? 'invisible' : 'visible'
+                        )}>
+                        <Send className='mr-2 h-4 w-4' />
+                        Send to Edit
+                    </Button>
+                    {onSendToVideo && (
+                        <Button
+                            variant='outline'
+                            size='sm'
+                            onClick={handleSendToVideoClick}
+                            disabled={!canSendToVideo}
+                            className={cn(
+                                'shrink-0 border-white/20 text-white/80 hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-50',
+                                showCarousel && viewMode === 'grid' ? 'invisible' : 'visible'
+                            )}>
+                            <Send className='mr-2 h-4 w-4' />
+                            Send to Video
+                        </Button>
+                    )}
+                </div>
             </div>
         </div>
     );

@@ -43,8 +43,8 @@ export type GenerationFormData = {
 type GenerationFormProps = {
     onSubmit: (data: GenerationFormData) => void;
     isLoading: boolean;
-    currentMode: 'generate' | 'edit';
-    onModeChange: (mode: 'generate' | 'edit') => void;
+    currentMode: 'generate' | 'edit' | 'video';
+    onModeChange: (mode: 'generate' | 'edit' | 'video') => void;
     isPasswordRequiredByBackend: boolean | null;
     clientPasswordHash: string | null;
     onOpenPasswordDialog: () => void;
