@@ -238,7 +238,7 @@ export function VideoForm({
                         />
                         <div className='rounded-md border border-white/10 bg-white/5 p-3 text-xs'>
                             <p className='text-white/60'>
-                                <span className='font-medium text-white/80'>Note:</span> Sora video generation takes 1–2 minutes. Keep this tab open.
+                                <span className='font-medium text-white/80'>Note:</span> Sora video generation takes a while (5+ minutes for longer videos). Keep this tab open.
                             </p>
                             <p className='mt-1 text-amber-200/80'>
                                 <span className='font-medium text-amber-200'>Policy:</span> Sora 2 blocks all IP and photorealistic content.

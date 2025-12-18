@@ -15,18 +15,39 @@ type VideoOutputProps = {
     viewIndex: number;
     onViewChange: (index: number) => void;
     isLoading: boolean;
+    elapsedSeconds?: number;
 };
 
-export function VideoOutput({ videoBatch, viewIndex, onViewChange, isLoading }: VideoOutputProps) {
+function formatElapsedTime(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+export function VideoOutput({ videoBatch, viewIndex, onViewChange, isLoading, elapsedSeconds = 0 }: VideoOutputProps) {
     const activeVideo = videoBatch && videoBatch[viewIndex] ? videoBatch[viewIndex] : null;
 
     return (
         <div className='flex h-full min-h-[300px] w-full flex-col gap-4 overflow-hidden rounded-lg border border-white/20 bg-black p-4'>
             <div className='relative flex h-full w-full flex-grow items-center justify-center overflow-hidden'>
                 {isLoading ? (
-                    <div className='flex flex-col items-center justify-center text-white/60'>
-                        <Loader2 className='mb-2 h-8 w-8 animate-spin' />
-                        <p>Rendering video...</p>
+                    <div className='flex flex-col items-center justify-center gap-4 text-white/60'>
+                        <div className='relative'>
+                            <div className='absolute inset-0 animate-ping rounded-full bg-purple-500/20' />
+                            <div className='relative rounded-full bg-gradient-to-tr from-purple-500/30 to-pink-500/30 p-4'>
+                                <Loader2 className='h-10 w-10 animate-spin text-purple-400' />
+                            </div>
+                        </div>
+                        <div className='flex flex-col items-center gap-2'>
+                            <p className='text-base font-medium text-white/80'>Rendering video...</p>
+                            <div className='flex items-center gap-2 rounded-full bg-white/5 px-4 py-2 backdrop-blur-sm'>
+                                <div className='h-2 w-2 animate-pulse rounded-full bg-green-400' />
+                                <span className='font-mono text-lg tabular-nums text-white/90'>
+                                    {formatElapsedTime(elapsedSeconds)}
+                                </span>
+                            </div>
+                            <p className='text-xs text-white/40'>This may take a few minutes</p>
+                        </div>
                     </div>
                 ) : activeVideo ? (
                     <video

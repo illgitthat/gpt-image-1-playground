@@ -139,6 +139,8 @@ export default function HomePage() {
     const [isEnhancingVideoPrompt, setIsEnhancingVideoPrompt] = React.useState(false);
     const [videoPromptEnhanceError, setVideoPromptEnhanceError] = React.useState<string | null>(null);
     const videoPollTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [videoElapsedSeconds, setVideoElapsedSeconds] = React.useState(0);
+    const videoTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
     // Streaming previews are on by default (auto-disabled when multiple images are requested)
     const [partialImages] = React.useState<1 | 2 | 3>(3);
@@ -311,6 +313,9 @@ export default function HomePage() {
         return () => {
             if (videoPollTimeoutRef.current) {
                 clearTimeout(videoPollTimeoutRef.current);
+            }
+            if (videoTimerRef.current) {
+                clearInterval(videoTimerRef.current);
             }
         };
     }, []);
@@ -486,11 +491,21 @@ export default function HomePage() {
             clearTimeout(videoPollTimeoutRef.current);
             videoPollTimeoutRef.current = null;
         }
+        if (videoTimerRef.current) {
+            clearInterval(videoTimerRef.current);
+            videoTimerRef.current = null;
+        }
 
         setIsGeneratingVideo(true);
         setError(null);
         setLatestVideoBatch(null);
         setVideoViewIndex(0);
+        setVideoElapsedSeconds(0);
+
+        // Start elapsed time timer
+        videoTimerRef.current = setInterval(() => {
+            setVideoElapsedSeconds((prev) => prev + 1);
+        }, 1000);
 
         if (isPasswordRequiredByBackend && !clientPasswordHash) {
             setError('Password is required. Please configure the password by clicking the lock icon.');
@@ -542,7 +557,7 @@ export default function HomePage() {
                 throw new Error('Video API did not return a job id.');
             }
 
-            const maxAttempts = 90;
+            const maxAttempts = 300;
             const pollDelayMs = 2000;
 
             const pollStatus = async (attempt = 0) => {
@@ -598,6 +613,10 @@ export default function HomePage() {
                             clearTimeout(videoPollTimeoutRef.current);
                             videoPollTimeoutRef.current = null;
                         }
+                        if (videoTimerRef.current) {
+                            clearInterval(videoTimerRef.current);
+                            videoTimerRef.current = null;
+                        }
                         setIsGeneratingVideo(false);
                         return;
                     }
@@ -619,6 +638,10 @@ export default function HomePage() {
                         clearTimeout(videoPollTimeoutRef.current);
                         videoPollTimeoutRef.current = null;
                     }
+                    if (videoTimerRef.current) {
+                        clearInterval(videoTimerRef.current);
+                        videoTimerRef.current = null;
+                    }
 
                     const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while polling video status.';
                     setError(errorMessage);
@@ -629,6 +652,10 @@ export default function HomePage() {
 
             pollStatus(0);
         } catch (err: unknown) {
+            if (videoTimerRef.current) {
+                clearInterval(videoTimerRef.current);
+                videoTimerRef.current = null;
+            }
             const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while creating video.';
             setError(errorMessage);
             setLatestVideoBatch(null);
@@ -1423,6 +1450,7 @@ export default function HomePage() {
                                 viewIndex={videoViewIndex}
                                 onViewChange={setVideoViewIndex}
                                 isLoading={isGeneratingVideo}
+                                elapsedSeconds={videoElapsedSeconds}
                             />
                         ) : (
                                 <ImageOutput
