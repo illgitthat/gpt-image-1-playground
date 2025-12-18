@@ -25,7 +25,8 @@ import {
     HardDrive,
     Database,
     FileImage,
-    Trash2
+    Trash2,
+    ArrowUpRight
 } from 'lucide-react';
 import Image from 'next/image';
 import * as React from 'react';
@@ -41,6 +42,7 @@ type HistoryPanelProps = {
     onCancelDeletion: () => void;
     deletePreferenceDialogValue: boolean;
     onDeletePreferenceDialogChange: (isChecked: boolean) => void;
+    onReusePrompt: (prompt: string, mode: 'generate' | 'edit' | 'video') => void;
 };
 
 const formatDuration = (ms: number): string => {
@@ -52,7 +54,7 @@ const formatDuration = (ms: number): string => {
 
 const calculateCost = (value: number, rate: number): string => {
     const cost = value * rate;
-    return isNaN(cost) ? 'N/A' : cost.toFixed(4);
+    return isNaN(cost) ? 'N/A' : cost.toFixed(2);
 };
 
 export function HistoryPanel({
@@ -65,7 +67,8 @@ export function HistoryPanel({
     onConfirmDeletion,
     onCancelDeletion,
     deletePreferenceDialogValue,
-    onDeletePreferenceDialogChange
+    onDeletePreferenceDialogChange,
+    onReusePrompt
 }: HistoryPanelProps) {
     const [openPromptDialogTimestamp, setOpenPromptDialogTimestamp] = React.useState<number | null>(null);
     const [openCostDialogTimestamp, setOpenCostDialogTimestamp] = React.useState<number | null>(null);
@@ -82,7 +85,7 @@ export function HistoryPanel({
             images += item.images?.length ?? 0;
         });
 
-        return { totalCost: Math.round(cost * 10000) / 10000, totalImages: images };
+        return { totalCost: Math.round(cost * 100) / 100, totalImages: images };
     }, [history]);
 
     const averageCost = totalImages > 0 ? totalCost / totalImages : 0;
@@ -107,9 +110,9 @@ export function HistoryPanel({
                         <Dialog open={isTotalCostDialogOpen} onOpenChange={setIsTotalCostDialogOpen}>
                             <DialogTrigger asChild>
                                 <button
-                                    className='mt-0.5 flex items-center gap-1 rounded-full bg-green-600/80 px-1.5 py-0.5 text-[12px] text-white transition-colors hover:bg-green-500/90'
+                                    className='mt-0.5 flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-[12px] text-green-400 transition-colors hover:bg-green-500/20 hover:text-green-300'
                                     aria-label='Show total cost summary'>
-                                    Total Estimated Cost: ${totalCost.toFixed(4)}
+                                    Total Estimated Cost: ${totalCost.toFixed(2)}
                                 </button>
                             </DialogTrigger>
                             <DialogContent className='border-neutral-700 bg-neutral-900 text-white sm:max-w-[450px]'>
@@ -145,12 +148,12 @@ export function HistoryPanel({
                                         <span>Total Images Generated:</span> <span>{totalImages.toLocaleString()}</span>
                                     </div>
                                     <div className='flex justify-between'>
-                                        <span>Average Cost Per Image:</span> <span>${averageCost.toFixed(4)}</span>
+                                        <span>Average Cost Per Image:</span> <span>${averageCost.toFixed(2)}</span>
                                     </div>
                                     <hr className='my-2 border-neutral-700' />
                                     <div className='flex justify-between font-medium text-white'>
                                         <span>Total Estimated Cost:</span>
-                                        <span>${totalCost.toFixed(4)}</span>
+                                        <span>${totalCost.toFixed(2)}</span>
                                     </div>
                                 </div>
                                 <DialogFooter>
@@ -287,10 +290,10 @@ export function HistoryPanel({
                                                             e.stopPropagation();
                                                             setOpenCostDialogTimestamp(itemKey);
                                                         }}
-                                                        className='absolute top-1 right-1 z-20 flex items-center gap-0.5 rounded-full bg-green-600/80 px-1.5 py-0.5 text-[11px] text-white transition-colors hover:bg-green-500/90'
+                                                        className='absolute top-1 right-1 z-20 flex items-center gap-0.5 rounded-full bg-black/40 px-1.5 py-0.5 text-[11px] text-white/70 backdrop-blur-sm transition-colors hover:bg-black/60 hover:text-white'
                                                         aria-label='Show cost breakdown'>
                                                         <DollarSign size={12} />
-                                                        {item.costDetails.estimated_cost_usd.toFixed(4)}
+                                                        {item.costDetails.estimated_cost_usd.toFixed(2)}
                                                     </button>
                                                 </DialogTrigger>
                                                 <DialogContent className='border-neutral-700 bg-neutral-900 text-white sm:max-w-[450px]'>
@@ -315,7 +318,7 @@ export function HistoryPanel({
                                                             <hr className='my-2 border-neutral-700' />
                                                             <div className='flex justify-between font-medium text-white'>
                                                                 <span>Total Estimated Cost:</span>
-                                                                <span>${item.costDetails.estimated_cost_usd.toFixed(4)}</span>
+                                                                <span>${item.costDetails.estimated_cost_usd.toFixed(2)}</span>
                                                             </div>
                                                         </div>
                                                     ) : (
@@ -395,7 +398,7 @@ export function HistoryPanel({
                                                                 <div className='flex justify-between font-medium text-white'>
                                                                     <span>Total Estimated Cost:</span>
                                                                     <span>
-                                                                        ${item.costDetails.estimated_cost_usd.toFixed(4)}
+                                                                        ${item.costDetails.estimated_cost_usd.toFixed(2)}
                                                                     </span>
                                                                 </div>
                                                             </div>
@@ -476,6 +479,19 @@ export function HistoryPanel({
                                                         {item.prompt || 'No prompt recorded.'}
                                                     </div>
                                                     <DialogFooter>
+                                                        <Button
+                                                            variant='outline'
+                                                            size='sm'
+                                                            onClick={() => {
+                                                                if (item.prompt) {
+                                                                    onReusePrompt(item.prompt, item.mode);
+                                                                    setOpenPromptDialogTimestamp(null);
+                                                                }
+                                                            }}
+                                                            className='border-neutral-600 text-neutral-300 hover:bg-neutral-700 hover:text-white'>
+                                                            <ArrowUpRight className='mr-2 h-4 w-4' />
+                                                            Use Prompt
+                                                        </Button>
                                                         <Button
                                                             variant='outline'
                                                             size='sm'

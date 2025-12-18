@@ -1279,6 +1279,19 @@ export default function HomePage() {
         setItemToDeleteConfirm(null);
     };
 
+    const handleReusePrompt = (prompt: string, targetMode: 'generate' | 'edit' | 'video') => {
+        if (targetMode === 'generate') {
+            setGenPrompt(prompt);
+            setMode('generate');
+        } else if (targetMode === 'edit') {
+            setEditPrompt(prompt);
+            setMode('edit');
+        } else if (targetMode === 'video') {
+            setVideoPrompt(prompt);
+            setMode('video');
+        }
+    };
+
     return (
         <main className='flex min-h-screen flex-col items-center bg-black p-4 text-white md:p-8 lg:p-12'>
             <PasswordDialog
@@ -1440,6 +1453,7 @@ export default function HomePage() {
                         onCancelDeletion={handleCancelDeletion}
                         deletePreferenceDialogValue={dialogCheckboxStateSkipConfirm}
                         onDeletePreferenceDialogChange={setDialogCheckboxStateSkipConfirm}
+                        onReusePrompt={handleReusePrompt}
                     />
                 </div>
             </div>

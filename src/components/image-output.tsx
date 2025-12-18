@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Loader2, Send, Grid } from 'lucide-react';
+import { Loader2, Send, Grid, Download } from 'lucide-react';
 import Image from 'next/image';
 
 type ImageInfo = {
@@ -55,10 +55,31 @@ export function ImageOutput({
         }
     };
 
+    const handleDownload = async () => {
+        if (typeof viewMode === 'number' && imageBatch && imageBatch[viewMode]) {
+            const img = imageBatch[viewMode];
+            try {
+                const response = await fetch(img.path);
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = img.filename; // Use the filename from the image info
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } catch (error) {
+                console.error('Download failed:', error);
+            }
+        }
+    };
+
     const showCarousel = imageBatch && imageBatch.length > 1;
     const isSingleImageView = typeof viewMode === 'number';
     const canSendToEdit = !isLoading && isSingleImageView && imageBatch && imageBatch[viewMode];
     const canSendToVideo = !isLoading && isSingleImageView && imageBatch && imageBatch[viewMode] && Boolean(onSendToVideo);
+    const canDownload = !isLoading && isSingleImageView && imageBatch && imageBatch[viewMode];
 
     return (
         <div className='flex h-full min-h-[300px] w-full flex-col items-center justify-between gap-4 overflow-hidden rounded-lg border border-white/20 bg-black p-4'>
@@ -194,6 +215,18 @@ export function ImageOutput({
                 )}
 
                 <div className='flex items-center gap-2'>
+                    <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={handleDownload}
+                        disabled={!canDownload}
+                        className={cn(
+                            'shrink-0 border-white/20 text-white/80 hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-50',
+                            showCarousel && viewMode === 'grid' ? 'invisible' : 'visible'
+                        )}>
+                        <Download className='mr-2 h-4 w-4' />
+                        Download
+                    </Button>
                     <Button
                         variant='outline'
                         size='sm'
