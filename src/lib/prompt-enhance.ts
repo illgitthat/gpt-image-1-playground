@@ -12,7 +12,7 @@ Rules:
 - Text in image: if the user requests text, include it verbatim in "QUOTES" and specify typography (font style, weight, color, placement, and contrast). For uncommon words, spell them letter-by-letter.
 - Multi-image inputs: if the user references multiple images, explicitly label them by index (Image 1, Image 2, …) and describe how they interact (e.g., apply Image 2 style to Image 1 subject).
 - Constraints: include hard requirements the user stated (e.g., background, aspect, placement, exclusions). When expressing exclusions, keep phrasing minimal and constraint-like.
-- Length target: ~75–140 words. Be concise and visual; avoid filler and generic quality buzzwords.
+- Length target: ~75-140 words. Be concise and visual; avoid filler and generic quality buzzwords.
 
 Examples of the kind of output you should produce (do not copy verbatim; adapt to the user):
 - Infographic: "A clean technical infographic explaining the flow of an automatic coffee machine… labeled components, consistent typography hierarchy, high contrast, precise arrows and callouts…"
@@ -26,7 +26,7 @@ Guidelines:
 - Be explicit about what is being changed (object/region, text, color, lighting, clothing, background, etc.) and how it should look after the edit.
 - Match the original image's style, lighting, perspective, and material realism unless the user explicitly requests a style change.
 - If editing text inside the image, include the exact replacement text in "QUOTES" and describe typography (font style, size, color, placement).
-- Keep it extremely concise (ideally 20–60 words).
+- Keep it extremely concise (ideally 20-60 words).
 
 Example Input: "Make the dog a cat"
 Example Output: "Change only the dog into a fluffy Siamese cat sitting in the same spot, matching the original lighting and perspective. Keep everything else the same."`;
@@ -37,7 +37,7 @@ Rules:
 - Return ONLY the raw prompt text (no markdown, no labels, no quotes around the whole prompt).
 - Anchor the description to the reference image: subjects, environment, lighting, style, and camera perspective must stay consistent unless the user explicitly asks for changes.
 - Describe motion and temporal beats: what moves, how fast, in what order, and where the camera is (pan/tilt/dolly/zoom), including duration cues if implied.
-- Keep it brief (35–80 words), visual, and specific about atmosphere, lighting, and any style constraints (cinematic, handheld, tripod-stable, slow pan, etc.).
+- Keep it brief (35-80 words), visual, and specific about atmosphere, lighting, and any style constraints (cinematic, handheld, tripod-stable, slow pan, etc.).
 - If text is required on screen, include it in "QUOTES" with typography notes (placement, size, contrast).
 - Avoid inventing new objects or characters not present/expected; stay faithful to the reference composition.
 `;
@@ -47,7 +47,7 @@ const videoPromptOnlySystemPrompt = `You are an expert prompt engineer for promp
 Rules:
 - Return ONLY the raw prompt text (no markdown, no labels, no quotes around the whole prompt).
 - Describe scene/background → subjects → motion beats (order, speed, direction) → camera (pan/tilt/dolly/zoom, stability) → lighting/mood → style/medium → constraints.
-- Keep it concise (40–90 words), cinematic or clearly styled per user intent; avoid filler quality terms.
+- Keep it concise (40-90 words), cinematic or clearly styled per user intent; avoid filler quality terms.
 - If text appears on screen, include it in "QUOTES" with typography notes (placement, size, contrast).
 - Do not invent factual details the user did not imply; stay faithful to their intent.
 `;
