@@ -300,77 +300,107 @@ export function HistoryPanel({
                                                             Estimated cost breakdown for this image generation.
                                                         </DialogDescription>
                                                     </DialogHeader>
-                                                    <div className='space-y-1 pt-1 text-xs text-neutral-400'>
-                                                        <p>Pricing for {item.model || 'gpt-image-1'}:</p>
-                                                        <ul className='list-disc pl-4'>
-                                                            {(item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? (
-                                                                <>
-                                                                    <li>Text Input: $2 / 1M tokens</li>
-                                                                    <li>Image Input: $2.50 / 1M tokens</li>
-                                                                    <li>Image Output: $8 / 1M tokens</li>
-                                                                </>
-                                                            ) : (item.model || 'gpt-image-1') === 'gpt-image-1.5' ? (
-                                                                <>
-                                                                    <li>Text Input: $5 / 1M tokens</li>
-                                                                    <li>Image Input: $8 / 1M tokens</li>
-                                                                    <li>Image Output: $32 / 1M tokens</li>
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <li>Text Input: $5 / 1M tokens</li>
-                                                                    <li>Image Input: $10 / 1M tokens</li>
-                                                                    <li>Image Output: $40 / 1M tokens</li>
-                                                                </>
-                                                            )}
-                                                        </ul>
-                                                    </div>
-                                                    <div className='space-y-2 py-4 text-sm text-neutral-300'>
-                                                        <div className='flex justify-between'>
-                                                            <span>Text Input Tokens:</span>{' '}
-                                                            <span>
-                                                                {item.costDetails.text_input_tokens.toLocaleString()}{' '}
-                                                                (~$
-                                                                {calculateCost(
-                                                                    item.costDetails.text_input_tokens,
-                                                                    (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.000002 : 0.000005
-                                                                )}
-                                                                )
-                                                            </span>
-                                                        </div>
-                                                        {item.costDetails.image_input_tokens > 0 && (
-                                                            <div className='flex justify-between'>
-                                                                <span>Image Input Tokens:</span>{' '}
-                                                                <span>
-                                                                    {item.costDetails.image_input_tokens.toLocaleString()}{' '}
-                                                                    (~$
-                                                                    {calculateCost(
-                                                                        item.costDetails.image_input_tokens,
-                                                                        (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.0000025 : (item.model || 'gpt-image-1') === 'gpt-image-1.5' ? 0.000008 : 0.00001
-                                                                    )}
-                                                                    )
-                                                                </span>
+                                                    {item.mode === 'video' ? (
+                                                        <div className='space-y-3 py-3 text-sm text-neutral-300'>
+                                                            <div className='space-y-1 text-xs text-neutral-400'>
+                                                                <p>Pricing for Sora video:</p>
+                                                                <ul className='list-disc pl-4'>
+                                                                    <li>$0.10 per second</li>
+                                                                </ul>
                                                             </div>
-                                                        )}
-                                                        <div className='flex justify-between'>
-                                                            <span>Image Output Tokens:</span>{' '}
-                                                            <span>
-                                                                {item.costDetails.image_output_tokens.toLocaleString()}{' '}
-                                                                (~$
-                                                                {calculateCost(
-                                                                    item.costDetails.image_output_tokens,
-                                                                    (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.000008 : (item.model || 'gpt-image-1') === 'gpt-image-1.5' ? 0.000032 : 0.00004
+                                                            <div className='flex justify-between'>
+                                                                <span>Duration (s):</span>
+                                                                <span>{item.videoSeconds ?? 'N/A'}</span>
+                                                            </div>
+                                                            <hr className='my-2 border-neutral-700' />
+                                                            <div className='flex justify-between font-medium text-white'>
+                                                                <span>Total Estimated Cost:</span>
+                                                                <span>${item.costDetails.estimated_cost_usd.toFixed(4)}</span>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <div className='space-y-1 pt-1 text-xs text-neutral-400'>
+                                                                <p>Pricing for {item.model || 'gpt-image-1'}:</p>
+                                                                <ul className='list-disc pl-4'>
+                                                                    {(item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? (
+                                                                        <>
+                                                                            <li>Text Input: $2 / 1M tokens</li>
+                                                                            <li>Image Input: $2.50 / 1M tokens</li>
+                                                                            <li>Image Output: $8 / 1M tokens</li>
+                                                                        </>
+                                                                    ) : (item.model || 'gpt-image-1') === 'gpt-image-1.5' ? (
+                                                                        <>
+                                                                            <li>Text Input: $5 / 1M tokens</li>
+                                                                            <li>Image Input: $8 / 1M tokens</li>
+                                                                            <li>Image Output: $32 / 1M tokens</li>
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <li>Text Input: $5 / 1M tokens</li>
+                                                                            <li>Image Input: $10 / 1M tokens</li>
+                                                                            <li>Image Output: $40 / 1M tokens</li>
+                                                                        </>
+                                                                    )}
+                                                                </ul>
+                                                            </div>
+                                                            <div className='space-y-2 py-4 text-sm text-neutral-300'>
+                                                                <div className='flex justify-between'>
+                                                                    <span>Text Input Tokens:</span>{' '}
+                                                                    <span>
+                                                                        {item.costDetails.text_input_tokens.toLocaleString()}{' '}
+                                                                        (~$
+                                                                        {calculateCost(
+                                                                            item.costDetails.text_input_tokens,
+                                                                            (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.000002 : 0.000005
+                                                                        )}
+                                                                        )
+                                                                    </span>
+                                                                </div>
+                                                                {item.costDetails.image_input_tokens > 0 && (
+                                                                    <div className='flex justify-between'>
+                                                                        <span>Image Input Tokens:</span>{' '}
+                                                                        <span>
+                                                                            {item.costDetails.image_input_tokens.toLocaleString()}{' '}
+                                                                            (~$
+                                                                            {calculateCost(
+                                                                                item.costDetails.image_input_tokens,
+                                                                                (item.model || 'gpt-image-1') === 'gpt-image-1-mini'
+                                                                                    ? 0.0000025
+                                                                                    : (item.model || 'gpt-image-1') === 'gpt-image-1.5'
+                                                                                        ? 0.000008
+                                                                                        : 0.00001
+                                                                            )}
+                                                                            )
+                                                                        </span>
+                                                                    </div>
                                                                 )}
-                                                                )
-                                                            </span>
-                                                        </div>
-                                                        <hr className='my-2 border-neutral-700' />
-                                                        <div className='flex justify-between font-medium text-white'>
-                                                            <span>Total Estimated Cost:</span>
-                                                            <span>
-                                                                ${item.costDetails.estimated_cost_usd.toFixed(4)}
-                                                            </span>
-                                                        </div>
-                                                    </div>
+                                                                <div className='flex justify-between'>
+                                                                    <span>Image Output Tokens:</span>{' '}
+                                                                    <span>
+                                                                        {item.costDetails.image_output_tokens.toLocaleString()}{' '}
+                                                                        (~$
+                                                                        {calculateCost(
+                                                                            item.costDetails.image_output_tokens,
+                                                                            (item.model || 'gpt-image-1') === 'gpt-image-1-mini'
+                                                                                ? 0.000008
+                                                                                : (item.model || 'gpt-image-1') === 'gpt-image-1.5'
+                                                                                    ? 0.000032
+                                                                                    : 0.00004
+                                                                        )}
+                                                                        )
+                                                                    </span>
+                                                                </div>
+                                                                <hr className='my-2 border-neutral-700' />
+                                                                <div className='flex justify-between font-medium text-white'>
+                                                                    <span>Total Estimated Cost:</span>
+                                                                    <span>
+                                                                        ${item.costDetails.estimated_cost_usd.toFixed(4)}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </>
+                                                    )}
                                                     <DialogFooter>
                                                         <DialogClose asChild>
                                                             <Button

@@ -12,7 +12,7 @@ A web-based playground to interact with OpenAI's GPT image models (`gpt-image-1`
 
 *   **🎨 Image Generation Mode:** Create new images from text prompts.
 *   **🖌️ Image Editing Mode:** Modify existing images based on text prompts and optional masks.
-*   **🎞️ Image → Video (Sora 2):** Transform a reference image into a short video using Azure OpenAI Sora 2.
+*   **🎞️ Image → Video (Sora 2):** Generate a short video from a prompt, optionally guided by a reference image, using OpenAI Sora 2.
 *   **⚙️ Full API Parameter Control:** Access and adjust all relevant parameters supported by the OpenAI Images API directly through the UI (size, quality, output format, compression, background, moderation, number of images).
 *   **🎭 Integrated Masking Tool:** Easily create or upload masks directly within the editing mode to specify areas for modification. Draw directly on the image to generate a mask.
 

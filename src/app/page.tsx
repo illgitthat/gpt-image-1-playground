@@ -8,7 +8,7 @@ import { PasswordDialog } from '@/components/password-dialog';
 import { VideoForm, type VideoFormData } from '@/components/video-form';
 import { VideoOutput } from '@/components/video-output';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { calculateApiCost, type CostDetails } from '@/lib/cost-utils';
+import { calculateApiCost, calculateSoraVideoCost, type CostDetails } from '@/lib/cost-utils';
 import { db, type ImageRecord } from '@/lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import * as React from 'react';
@@ -137,6 +137,7 @@ export default function HomePage() {
     const [videoViewIndex, setVideoViewIndex] = React.useState(0);
     const [isEnhancingVideoPrompt, setIsEnhancingVideoPrompt] = React.useState(false);
     const [videoPromptEnhanceError, setVideoPromptEnhanceError] = React.useState<string | null>(null);
+    const videoPollTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Streaming previews are on by default (auto-disabled when multiple images are requested)
     const [partialImages] = React.useState<1 | 2 | 3>(3);
@@ -305,6 +306,14 @@ export default function HomePage() {
         };
     }, [mode, editImageFiles.length]);
 
+    React.useEffect(() => {
+        return () => {
+            if (videoPollTimeoutRef.current) {
+                clearTimeout(videoPollTimeoutRef.current);
+            }
+        };
+    }, []);
+
     async function sha256Client(text: string): Promise<string> {
         const encoder = new TextEncoder();
         const data = encoder.encode(text);
@@ -414,16 +423,15 @@ export default function HomePage() {
 
     const handleVideoSubmit = async (formData: VideoFormData) => {
         const startTime = Date.now();
+        if (videoPollTimeoutRef.current) {
+            clearTimeout(videoPollTimeoutRef.current);
+            videoPollTimeoutRef.current = null;
+        }
+
         setIsGeneratingVideo(true);
         setError(null);
         setLatestVideoBatch(null);
         setVideoViewIndex(0);
-
-        if (!formData.referenceImage) {
-            setError('Reference image is required for Sora.');
-            setIsGeneratingVideo(false);
-            return;
-        }
 
         if (isPasswordRequiredByBackend && !clientPasswordHash) {
             setError('Password is required. Please configure the password by clicking the lock icon.');
@@ -437,7 +445,9 @@ export default function HomePage() {
         apiFormData.append('prompt', formData.prompt);
         apiFormData.append('size', formData.size);
         apiFormData.append('seconds', formData.seconds.toString());
-        apiFormData.append('reference_image', formData.referenceImage, formData.referenceImage.name);
+        if (formData.referenceImage) {
+            apiFormData.append('reference_image', formData.referenceImage, formData.referenceImage.name);
+        }
 
         if (isPasswordRequiredByBackend && clientPasswordHash) {
             apiFormData.append('passwordHash', clientPasswordHash);
@@ -449,7 +459,13 @@ export default function HomePage() {
                 body: apiFormData
             });
 
-            const result = await response.json();
+            const rawText = await response.text();
+            let result: any = null;
+            try {
+                result = JSON.parse(rawText);
+            } catch {
+                // keep rawText for error display
+            }
 
             if (!response.ok) {
                 if (response.status === 401 && isPasswordRequiredByBackend) {
@@ -458,40 +474,105 @@ export default function HomePage() {
                     setIsPasswordDialogOpen(true);
                     return;
                 }
-                throw new Error(result.error || `Video API request failed with status ${response.status}`);
+                const fallback = (result && result.error) || rawText || `Video API request failed with status ${response.status}`;
+                throw new Error(typeof fallback === 'string' ? fallback : 'Video API request failed.');
             }
 
-            if (result.videos && result.videos.length > 0) {
-                const durationMs = Date.now() - startTime;
-                setLatestVideoBatch(result.videos);
-                setMode('video');
-
-                const batchTimestamp = Date.now();
-                const newHistoryEntry: HistoryMetadata = {
-                    timestamp: batchTimestamp,
-                    videos: result.videos.map((vid: { filename: string }) => ({ filename: vid.filename })),
-                    storageModeUsed: 'fs',
-                    durationMs,
-                    quality: 'auto',
-                    background: 'auto',
-                    moderation: 'auto',
-                    prompt: formData.prompt,
-                    mode: 'video',
-                    costDetails: null,
-                    videoSize: formData.size,
-                    videoSeconds: formData.seconds,
-                    model: result.model || 'sora-2'
-                };
-
-                setHistory((prevHistory) => [newHistoryEntry, ...prevHistory]);
-            } else {
-                throw new Error('Video API response did not contain a video.');
+            const jobId: string | undefined = result?.jobId;
+            if (!jobId) {
+                throw new Error('Video API did not return a job id.');
             }
+
+            const maxAttempts = 90;
+            const pollDelayMs = 2000;
+
+            const pollStatus = async (attempt = 0) => {
+                try {
+                    const statusResp = await fetch(`/api/video?jobId=${encodeURIComponent(jobId)}`);
+                    const statusText = await statusResp.text();
+
+                    let statusJson: any = null;
+                    try {
+                        statusJson = JSON.parse(statusText);
+                    } catch {
+                        throw new Error(`Unexpected response while polling video: ${statusText?.slice(0, 200)}`);
+                    }
+
+                    if (!statusResp.ok) {
+                        const msg = statusJson?.error || `Video status check failed (${statusResp.status})`;
+                        throw new Error(msg);
+                    }
+
+                    const status = (statusJson.status as string | undefined)?.toLowerCase() || 'queued';
+
+                    if (status === 'succeeded' || status === 'completed') {
+                        if (statusJson.videos && statusJson.videos.length > 0) {
+                            const durationMs = Date.now() - startTime;
+                            setLatestVideoBatch(statusJson.videos);
+                            setMode('video');
+                            setVideoViewIndex(0);
+
+                            const batchTimestamp = Date.now();
+                            const videoCostDetails = calculateSoraVideoCost(formData.seconds);
+                            const newHistoryEntry: HistoryMetadata = {
+                                timestamp: batchTimestamp,
+                                videos: statusJson.videos.map((vid: { filename: string }) => ({ filename: vid.filename })),
+                                storageModeUsed: 'fs',
+                                durationMs,
+                                quality: 'auto',
+                                background: 'auto',
+                                moderation: 'auto',
+                                prompt: formData.prompt,
+                                mode: 'video',
+                                costDetails: videoCostDetails,
+                                videoSize: formData.size,
+                                videoSeconds: formData.seconds,
+                                model: statusJson.model || 'sora-2'
+                            };
+
+                            setHistory((prevHistory) => [newHistoryEntry, ...prevHistory]);
+                        } else {
+                            throw new Error('Video status succeeded but no video was returned.');
+                        }
+
+                        if (videoPollTimeoutRef.current) {
+                            clearTimeout(videoPollTimeoutRef.current);
+                            videoPollTimeoutRef.current = null;
+                        }
+                        setIsGeneratingVideo(false);
+                        return;
+                    }
+
+                    if (['queued', 'running', 'in_progress', 'processing', 'notstarted'].includes(status)) {
+                        if (attempt >= maxAttempts) {
+                            throw new Error('Video generation timed out while polling.');
+                        }
+                        videoPollTimeoutRef.current = setTimeout(() => {
+                            pollStatus(attempt + 1);
+                        }, pollDelayMs);
+                        return;
+                    }
+
+                    const failureReason = statusJson?.error || `Video generation failed with status: ${status}`;
+                    throw new Error(failureReason);
+                } catch (err: unknown) {
+                    if (videoPollTimeoutRef.current) {
+                        clearTimeout(videoPollTimeoutRef.current);
+                        videoPollTimeoutRef.current = null;
+                    }
+
+                    const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while polling video status.';
+                    setError(errorMessage);
+                    setLatestVideoBatch(null);
+                    setIsGeneratingVideo(false);
+                }
+            };
+
+            pollStatus(0);
         } catch (err: unknown) {
             const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while creating video.';
             setError(errorMessage);
             setLatestVideoBatch(null);
-        } finally {
             setIsGeneratingVideo(false);
         }
     };

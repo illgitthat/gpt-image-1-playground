@@ -149,7 +149,7 @@ export function VideoForm({
                         )}
                     </div>
                     <CardDescription className='mt-1 text-white/60'>
-                        Transform a reference image into a short video with Sora 2.
+                        Generate a short video from a prompt, optionally guided by a reference image (Sora 2).
                     </CardDescription>
                 </div>
                 <ModeToggle currentMode={currentMode} onModeChange={onModeChange} />
@@ -186,7 +186,7 @@ export function VideoForm({
                                 </Tooltip>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <span className='text-xs text-white/50'>Keep it concise and aligned with your reference.</span>
+                                        <span className='text-xs text-white/50'>Keep it concise and clear about motion/style.</span>
                                     </TooltipTrigger>
                                     <TooltipContent className='bg-black text-white'>
                                         Describe the motion or changes you want in the final video.
@@ -207,7 +207,7 @@ export function VideoForm({
                     </div>
 
                     <div className='space-y-3'>
-                        <Label className='block text-white'>Reference Image</Label>
+                        <Label className='block text-white'>Reference Image (optional)</Label>
                         <div className='flex items-center gap-3'>
                             <Button
                                 type='button'
@@ -216,7 +216,7 @@ export function VideoForm({
                                 onClick={() => fileInputRef.current?.click()}
                                 disabled={isLoading}>
                                 <ImageUp className='mr-2 h-4 w-4' />
-                                {referenceImage ? 'Replace image' : 'Upload image'}
+                                {referenceImage ? 'Replace image' : 'Upload image (optional)'}
                             </Button>
                             {referenceImage && (
                                 <Button
@@ -238,6 +238,9 @@ export function VideoForm({
                             disabled={isLoading}
                             className='sr-only'
                         />
+                        <p className='text-xs text-white/60'>
+                            Leave blank for prompt-only video generation, or add a reference to anchor layout/style.
+                        </p>
                         {referencePreviewUrl && (
                             <div className='flex items-center gap-3 rounded-md border border-white/15 bg-white/5 p-2'>
                                 <div className='relative h-16 w-16 overflow-hidden rounded'>
@@ -271,9 +274,6 @@ export function VideoForm({
                                 </div>
                             </div>
                         )}
-                        {!referenceImage && (
-                            <p className='text-xs text-yellow-200/80'>Reference image is required for Sora source transforms.</p>
-                        )}
                     </div>
 
                     <div className='space-y-3'>
@@ -306,7 +306,7 @@ export function VideoForm({
                                 </Label>
                             </div>
                         </RadioGroup>
-                        <p className='text-xs text-white/60'>The reference image must match the chosen resolution.</p>
+                        <p className='text-xs text-white/60'>If you add a reference, we will auto center-crop/resize it to the chosen resolution.</p>
                     </div>
 
                     <div className='space-y-2'>
@@ -329,7 +329,7 @@ export function VideoForm({
                 <CardFooter className='border-t border-white/10 p-4'>
                     <Button
                         type='submit'
-                        disabled={isLoading || !prompt || !referenceImage}
+                        disabled={isLoading || !prompt}
                         className='flex w-full items-center justify-center gap-2 rounded-md bg-white text-black hover:bg-white/90 disabled:bg-white/10 disabled:text-white/40'>
                         {isLoading ? <Loader2 className='h-4 w-4 animate-spin' /> : <Film className='h-4 w-4' />}
                         {isLoading ? 'Rendering video...' : 'Create Video'}

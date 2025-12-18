@@ -50,42 +50,52 @@ function getAzureBaseUrl(): string {
     return `${endpoint}/openai/v1`;
 }
 
-async function pollVideoStatus(jobId: string) {
+async function fetchVideoStatus(jobId: string) {
     const baseUrl = getAzureBaseUrl();
     // Sora endpoints require the "preview" api-version regardless of other Azure image/chat versions
     const apiVersion = 'preview';
     const statusUrl = `${baseUrl}/videos/${jobId}?api-version=${apiVersion}`;
 
-    let attempt = 0;
-    // Allow up to ~3 minutes (90 * 2s) for long-running Sora generations
-    const maxAttempts = 90;
-
-    while (attempt < maxAttempts) {
-        const statusResp = await fetch(statusUrl, {
-            method: 'GET',
-            headers: {
-                'api-key': azureConfig.apiKey || ''
-            }
-        });
-
-        if (!statusResp.ok) {
-            const errorText = await statusResp.text().catch(() => '');
-            throw new Error(`Failed to poll video status: ${statusResp.status} ${statusResp.statusText} ${errorText}`);
+    const statusResp = await fetch(statusUrl, {
+        method: 'GET',
+        headers: {
+            'api-key': azureConfig.apiKey || ''
         }
+    });
 
-        const statusJson = await statusResp.json();
-        const status = statusJson.status as string;
-
-        if (!status || status === 'queued' || status === 'in_progress' || status === 'running') {
-            attempt += 1;
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-            continue;
-        }
-
-        return statusJson;
+    if (!statusResp.ok) {
+        const errorText = await statusResp.text().catch(() => '');
+        throw new Error(`Failed to poll video status: ${statusResp.status} ${statusResp.statusText} ${errorText}`);
     }
 
-    throw new Error('Video generation timed out after ~3 minutes while waiting for completion.');
+    return statusResp.json();
+}
+
+async function downloadVideo(jobId: string, apiVersion: string, baseUrl: string) {
+    const downloadUrl = `${baseUrl}/videos/${jobId}/content?api-version=${apiVersion}&variant=video`;
+    const downloadResp = await fetch(downloadUrl, {
+        method: 'GET',
+        headers: {
+            'api-key': azureConfig.apiKey || '',
+            Accept: 'application/octet-stream'
+        }
+    });
+
+    if (!downloadResp.ok) {
+        const errorData = await downloadResp.text().catch(() => '');
+        throw new Error(`Failed to download video content: ${downloadResp.status} ${downloadResp.statusText} ${errorData}`);
+    }
+
+    const arrayBuffer = await downloadResp.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    await ensureOutputDirExists();
+
+    const filename = `${jobId}-sora.mp4`;
+    const filepath = path.join(outputDir, filename);
+    await fs.writeFile(filepath, buffer);
+
+    return { filename, path: `/api/image/${filename}` };
 }
 
 export async function POST(request: NextRequest) {
@@ -118,6 +128,7 @@ export async function POST(request: NextRequest) {
             ? secondsInput
             : allowedSeconds.reduce((prev, curr) => (Math.abs(curr - secondsInput) < Math.abs(prev - secondsInput) ? curr : prev), 8);
         const referenceImage = formData.get('reference_image');
+        const hasReferenceImage = referenceImage instanceof File && referenceImage.size > 0;
 
         if (!prompt) {
             return NextResponse.json({ error: 'Prompt is required.' }, { status: 400 });
@@ -127,8 +138,8 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid size. Supported sizes are 1280x720 and 720x1280.' }, { status: 400 });
         }
 
-        if (!(referenceImage instanceof File)) {
-            return NextResponse.json({ error: 'Reference image is required and must be a file.' }, { status: 400 });
+        if (referenceImage && !(referenceImage instanceof File)) {
+            return NextResponse.json({ error: 'Invalid reference image payload.' }, { status: 400 });
         }
 
         const baseUrl = getAzureBaseUrl();
@@ -136,28 +147,33 @@ export async function POST(request: NextRequest) {
         const createUrl = `${baseUrl}/videos?api-version=${apiVersion}`;
 
         const { width, height } = parseSize(size);
+        let resizedFile: File | null = null;
 
-        const refArrayBuffer = await referenceImage.arrayBuffer();
-        const refBuffer = Buffer.from(refArrayBuffer);
+        if (hasReferenceImage) {
+            const refArrayBuffer = await (referenceImage as File).arrayBuffer();
+            const refBuffer = Buffer.from(refArrayBuffer);
 
-        const resizedBuffer = await sharp(refBuffer)
-            .resize(width, height, { fit: 'cover', position: 'center' })
-            .png()
-            .toBuffer();
+            const resizedBuffer = await sharp(refBuffer)
+                .resize(width, height, { fit: 'cover', position: 'center' })
+                .png()
+                .toBuffer();
 
-        const resizedFile = new File([new Uint8Array(resizedBuffer)], 'reference.png', { type: 'image/png' });
+            resizedFile = new File([new Uint8Array(resizedBuffer)], 'reference.png', { type: 'image/png' });
+        }
 
         const requestForm = new FormData();
         requestForm.append('model', soraModel);
         requestForm.append('prompt', prompt);
         requestForm.append('size', size);
         requestForm.append('seconds', seconds.toString());
-        requestForm.append('input_reference', resizedFile, resizedFile.name);
+        if (resizedFile) {
+            requestForm.append('input_reference', resizedFile, resizedFile.name);
+        }
 
         const createResp = await fetch(createUrl, {
             method: 'POST',
             headers: {
-                'api-key': azureConfig.apiKey
+                'api-key': azureConfig.apiKey || ''
             },
             body: requestForm
         });
@@ -178,45 +194,75 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Video creation did not return a job id.' }, { status: 500 });
         }
 
-        const statusJson = await pollVideoStatus(jobId);
-        const status = (statusJson.status as string | undefined)?.toLowerCase();
-
-        if (status !== 'succeeded' && status !== 'completed') {
-            const failureReason = (statusJson.error && statusJson.error.message) || 'Video generation did not complete successfully.';
-            return NextResponse.json({ error: failureReason }, { status: 500 });
-        }
-
-        const downloadUrl = `${baseUrl}/videos/${jobId}/content?api-version=${apiVersion}&variant=video`;
-        const downloadResp = await fetch(downloadUrl, {
-            method: 'GET',
-            headers: {
-                'api-key': azureConfig.apiKey,
-                Accept: 'application/octet-stream'
-            }
-        });
-
-        if (!downloadResp.ok) {
-            const errorData = await downloadResp.text().catch(() => '');
-            return NextResponse.json(
-                { error: `Failed to download video content: ${downloadResp.status} ${downloadResp.statusText} ${errorData}` },
-                { status: downloadResp.status }
-            );
-        }
-
-        const arrayBuffer = await downloadResp.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-
-        const filename = `${Date.now()}-sora.mp4`;
-        const filepath = path.join(outputDir, filename);
-        await fs.writeFile(filepath, buffer);
-
         return NextResponse.json({
-            videos: [{ filename, path: `/api/image/${filename}` }],
-            model: soraModel
+            jobId,
+            status: 'running'
         });
     } catch (error: unknown) {
         console.error('Error in /api/video:', error);
         const message = error instanceof Error ? error.message : 'Unexpected server error.';
+        return NextResponse.json({ error: message }, { status: 500 });
+    }
+}
+
+export async function GET(request: NextRequest) {
+    if (!azureConfig.apiKey || !azureConfig.endpoint) {
+        console.error('Azure OpenAI credentials are missing for Sora video polling.');
+        return NextResponse.json({ error: 'Server configuration error: Azure OpenAI credentials are incomplete.' }, { status: 500 });
+    }
+
+    const jobId = request.nextUrl.searchParams.get('jobId');
+
+    if (!jobId) {
+        return NextResponse.json({ error: 'jobId is required.' }, { status: 400 });
+    }
+
+    try {
+        const baseUrl = getAzureBaseUrl();
+        const apiVersion = 'preview';
+
+        const statusJson = await fetchVideoStatus(jobId);
+        const status = (statusJson.status as string | undefined)?.toLowerCase();
+
+        if (!status || status === 'queued' || status === 'in_progress' || status === 'running' || status === 'notstarted' || status === 'processing') {
+            return NextResponse.json({ status: status || 'queued' });
+        }
+
+        if (status === 'succeeded' || status === 'completed') {
+            try {
+                await ensureOutputDirExists();
+                const filename = `${jobId}-sora.mp4`;
+                const filepath = path.join(outputDir, filename);
+
+                let alreadyExists = false;
+                try {
+                    await fs.access(filepath);
+                    alreadyExists = true;
+                } catch {
+                    alreadyExists = false;
+                }
+
+                if (!alreadyExists) {
+                    await downloadVideo(jobId, apiVersion, baseUrl);
+                }
+
+                return NextResponse.json({
+                    status: 'succeeded',
+                    videos: [{ filename, path: `/api/image/${filename}` }],
+                    model: soraModel
+                });
+            } catch (downloadError: unknown) {
+                console.error('Error downloading completed video:', downloadError);
+                const message = downloadError instanceof Error ? downloadError.message : 'Failed to download completed video.';
+                return NextResponse.json({ error: message }, { status: 500 });
+            }
+        }
+
+        const failureReason = (statusJson.error && statusJson.error.message) || 'Video generation did not complete successfully.';
+        return NextResponse.json({ status, error: failureReason }, { status: 500 });
+    } catch (error: unknown) {
+        console.error('Error polling /api/video status:', error);
+        const message = error instanceof Error ? error.message : 'Unexpected server error while polling video.';
         return NextResponse.json({ error: message }, { status: 500 });
     }
 }
