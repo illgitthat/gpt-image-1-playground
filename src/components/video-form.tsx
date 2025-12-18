@@ -77,6 +77,8 @@ export function VideoForm({
 }: VideoFormProps) {
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const [referenceDims, setReferenceDims] = React.useState<{ width: number; height: number } | null>(null);
+    const [userChoseSize, setUserChoseSize] = React.useState(false);
+    const previousPreviewUrl = React.useRef<string | null>(null);
 
     const targetSize = React.useMemo(() => {
         const [w, h] = size.split('x').map((v) => parseInt(v, 10));
@@ -88,25 +90,55 @@ export function VideoForm({
         return referenceDims.width >= referenceDims.height ? '1280x720' : '720x1280';
     }, [referenceDims, size]);
 
+    const maybeAutoSelectSize = React.useCallback(
+        (dims: { width: number; height: number }) => {
+            const suggested = dims.width >= dims.height ? '1280x720' : '720x1280';
+            if (!userChoseSize && size !== suggested) {
+                setSize(suggested);
+            }
+        },
+        [setSize, size, userChoseSize]
+    );
+
+    const syncReferenceMetadata = React.useCallback(
+        (previewUrl: string) => {
+            if (typeof window === 'undefined' || !previewUrl) return;
+
+            const img = new window.Image();
+            img.onload = () => {
+                const dims = { width: img.width, height: img.height };
+                setReferenceDims(dims);
+                maybeAutoSelectSize(dims);
+            };
+            img.onerror = () => setReferenceDims(null);
+            img.src = previewUrl;
+        },
+        [maybeAutoSelectSize]
+    );
+
+    React.useEffect(() => {
+        if (referencePreviewUrl) {
+            if (referencePreviewUrl !== previousPreviewUrl.current) {
+                previousPreviewUrl.current = referencePreviewUrl;
+                setUserChoseSize(false);
+                syncReferenceMetadata(referencePreviewUrl);
+            }
+        } else {
+            previousPreviewUrl.current = null;
+            setReferenceDims(null);
+        }
+    }, [referencePreviewUrl, syncReferenceMetadata]);
+
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
+        setUserChoseSize(false);
         setReferenceImage(file);
         const objectUrl = URL.createObjectURL(file);
         setReferencePreviewUrl((prev) => {
             if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
             return objectUrl;
         });
-
-        const img = new window.Image();
-        img.onload = () => {
-            setReferenceDims({ width: img.width, height: img.height });
-            // auto-suggest matching orientation
-            const suggested = img.width >= img.height ? '1280x720' : '720x1280';
-            setSize((prev) => prev || suggested);
-        };
-        img.onerror = () => setReferenceDims(null);
-        img.src = objectUrl;
     };
 
     const handleRemoveFile = () => {
@@ -116,6 +148,7 @@ export function VideoForm({
             return null;
         });
         setReferenceDims(null);
+        setUserChoseSize(false);
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
@@ -280,7 +313,10 @@ export function VideoForm({
                         <Label className='block text-white'>Resolution</Label>
                         <RadioGroup
                             value={size}
-                            onValueChange={(value) => setSize(value as VideoFormData['size'])}
+                            onValueChange={(value) => {
+                                setUserChoseSize(true);
+                                setSize(value as VideoFormData['size']);
+                            }}
                             disabled={isLoading}
                             className='flex flex-wrap gap-x-5 gap-y-3'>
                             <div className='flex items-center space-x-2'>
