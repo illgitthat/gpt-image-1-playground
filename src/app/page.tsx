@@ -5,8 +5,10 @@ import { GenerationForm, type GenerationFormData } from '@/components/generation
 import { HistoryPanel } from '@/components/history-panel';
 import { ImageOutput } from '@/components/image-output';
 import { PasswordDialog } from '@/components/password-dialog';
+import { VideoForm, type VideoFormData } from '@/components/video-form';
+import { VideoOutput } from '@/components/video-output';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { calculateApiCost, type CostDetails } from '@/lib/cost-utils';
+import { calculateApiCost, calculateSoraVideoCost, type CostDetails } from '@/lib/cost-utils';
 import { db, type ImageRecord } from '@/lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import * as React from 'react';
@@ -15,19 +17,26 @@ type HistoryImage = {
     filename: string;
 };
 
+type HistoryVideo = {
+    filename: string;
+};
+
 export type HistoryMetadata = {
     timestamp: number;
-    images: HistoryImage[];
+    images?: HistoryImage[];
+    videos?: HistoryVideo[];
     storageModeUsed?: 'fs' | 'indexeddb';
     durationMs: number;
     quality: GenerationFormData['quality'];
     background: GenerationFormData['background'];
     moderation: GenerationFormData['moderation'];
     prompt: string;
-    mode: 'generate' | 'edit';
+    mode: 'generate' | 'edit' | 'video';
     costDetails: CostDetails | null;
     output_format?: GenerationFormData['output_format'];
     model?: 'gpt-image-1' | 'gpt-image-1-mini' | 'gpt-image-1.5';
+    videoSize?: '1280x720' | '720x1280';
+    videoSeconds?: number;
 };
 
 type DrawnPoint = {
@@ -37,6 +46,7 @@ type DrawnPoint = {
 };
 
 const MAX_EDIT_IMAGES = 10;
+const MAX_PROMPT_ENHANCE_IMAGES = 3;
 
 const explicitModeClient = process.env.NEXT_PUBLIC_IMAGE_STORAGE_MODE;
 
@@ -66,7 +76,7 @@ type ApiImageResponseItem = {
 };
 
 export default function HomePage() {
-    const [mode, setMode] = React.useState<'generate' | 'edit'>('generate');
+    const [mode, setMode] = React.useState<'generate' | 'edit' | 'video'>('generate');
     const [isPasswordRequiredByBackend, setIsPasswordRequiredByBackend] = React.useState<boolean | null>(null);
     const [clientPasswordHash, setClientPasswordHash] = React.useState<string | null>(null);
     const [isLoading, setIsLoading] = React.useState(false);
@@ -118,13 +128,27 @@ export default function HomePage() {
 
     const [editModel, setEditModel] = React.useState<EditingFormData['model']>('gpt-image-1.5');
 
+    const [videoPrompt, setVideoPrompt] = React.useState('');
+    const [videoSize, setVideoSize] = React.useState<'1280x720' | '720x1280'>('1280x720');
+    const [videoSeconds, setVideoSeconds] = React.useState([8]);
+    const [videoReferenceImage, setVideoReferenceImage] = React.useState<File | null>(null);
+    const [videoReferencePreviewUrl, setVideoReferencePreviewUrl] = React.useState<string | null>(null);
+    const [isGeneratingVideo, setIsGeneratingVideo] = React.useState(false);
+    const [latestVideoBatch, setLatestVideoBatch] = React.useState<{ path: string; filename: string }[] | null>(null);
+    const [videoViewIndex, setVideoViewIndex] = React.useState(0);
+    const [isEnhancingVideoPrompt, setIsEnhancingVideoPrompt] = React.useState(false);
+    const [videoPromptEnhanceError, setVideoPromptEnhanceError] = React.useState<string | null>(null);
+    const videoPollTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
     // Streaming previews are on by default (auto-disabled when multiple images are requested)
     const [partialImages] = React.useState<1 | 2 | 3>(3);
     // Streaming preview images (base64 data URLs for partial images during streaming)
     const [streamingPreviewImages, setStreamingPreviewImages] = React.useState<Map<number, string>>(new Map());
 
     const isStreamingAllowed = React.useMemo(() => {
-        return mode === 'generate' ? genN[0] === 1 : editN[0] === 1;
+        if (mode === 'generate') return genN[0] === 1;
+        if (mode === 'edit') return editN[0] === 1;
+        return false;
     }, [mode, genN, editN]);
 
     const getImageSrc = React.useCallback(
@@ -155,6 +179,14 @@ export default function HomePage() {
             });
         };
     }, [blobUrlCache]);
+
+    React.useEffect(() => {
+        return () => {
+            if (videoReferencePreviewUrl && videoReferencePreviewUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(videoReferencePreviewUrl);
+            }
+        };
+    }, [videoReferencePreviewUrl]);
 
     React.useEffect(() => {
         return () => {
@@ -275,6 +307,14 @@ export default function HomePage() {
         };
     }, [mode, editImageFiles.length]);
 
+    React.useEffect(() => {
+        return () => {
+            if (videoPollTimeoutRef.current) {
+                clearTimeout(videoPollTimeoutRef.current);
+            }
+        };
+    }, []);
+
     async function sha256Client(text: string): Promise<string> {
         const encoder = new TextEncoder();
         const data = encoder.encode(text);
@@ -317,12 +357,36 @@ export default function HomePage() {
         return 'image/png';
     };
 
-    const handlePromptEnhance = async (targetMode: 'generate' | 'edit') => {
+    const fileToDataUrl = React.useCallback((file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                if (typeof reader.result === 'string') {
+                    resolve(reader.result);
+                } else {
+                    reject(new Error('Failed to read file as data URL.'));
+                }
+            };
+            reader.onerror = () => reject(reader.error ?? new Error('Unknown file read error.'));
+            reader.readAsDataURL(file);
+        });
+    }, []);
+
+    const handlePromptEnhance = async (targetMode: 'generate' | 'edit' | 'video') => {
         const isGenerate = targetMode === 'generate';
-        const targetPrompt = isGenerate ? genPrompt : editPrompt;
-        const setLoading = isGenerate ? setIsEnhancingGenPrompt : setIsEnhancingEditPrompt;
-        const setPrompt = isGenerate ? setGenPrompt : setEditPrompt;
-        const setEnhanceError = isGenerate ? setGenPromptEnhanceError : setEditPromptEnhanceError;
+        const isEdit = targetMode === 'edit';
+        const targetPrompt = isGenerate ? genPrompt : isEdit ? editPrompt : videoPrompt;
+        const setLoading = isGenerate
+            ? setIsEnhancingGenPrompt
+            : isEdit
+                ? setIsEnhancingEditPrompt
+                : setIsEnhancingVideoPrompt;
+        const setPrompt = isGenerate ? setGenPrompt : isEdit ? setEditPrompt : setVideoPrompt;
+        const setEnhanceError = isGenerate
+            ? setGenPromptEnhanceError
+            : isEdit
+                ? setEditPromptEnhanceError
+                : setVideoPromptEnhanceError;
 
         if (!targetPrompt.trim()) {
             setEnhanceError('Add a prompt first.');
@@ -339,6 +403,47 @@ export default function HomePage() {
         setEnhanceError(null);
         setLoading(true);
 
+        let referenceImagesPayload: { dataUrl: string; alt?: string }[] = [];
+        let videoHasReferenceImage = false;
+
+        if (targetMode === 'edit' && editImageFiles.length > 0) {
+            try {
+                const filesToSend = editImageFiles.slice(0, MAX_PROMPT_ENHANCE_IMAGES);
+                referenceImagesPayload = await Promise.all(
+                    filesToSend.map(async (file, index) => ({
+                        dataUrl: await fileToDataUrl(file),
+                        alt: `Reference image ${index + 1} for edit${file.name ? ` (${file.name})` : ''}`
+                    }))
+                );
+            } catch (readError) {
+                const message =
+                    readError instanceof Error
+                        ? readError.message
+                        : 'Failed to attach reference images for prompt enhancement.';
+                setEnhanceError(message);
+                setLoading(false);
+                return;
+            }
+        } else if (targetMode === 'video' && videoReferenceImage) {
+            try {
+                videoHasReferenceImage = true;
+                referenceImagesPayload = [
+                    {
+                        dataUrl: await fileToDataUrl(videoReferenceImage),
+                        alt: `Reference frame for video${videoReferenceImage.name ? ` (${videoReferenceImage.name})` : ''}`
+                    }
+                ];
+            } catch (readError) {
+                const message =
+                    readError instanceof Error
+                        ? readError.message
+                        : 'Failed to attach reference image for prompt enhancement.';
+                setEnhanceError(message);
+                setLoading(false);
+                return;
+            }
+        }
+
         try {
             const response = await fetch('/api/prompt-enhance', {
                 method: 'POST',
@@ -346,7 +451,9 @@ export default function HomePage() {
                 body: JSON.stringify({
                     prompt: targetPrompt,
                     mode: targetMode,
-                    passwordHash: isPasswordRequiredByBackend ? clientPasswordHash : undefined
+                    passwordHash: isPasswordRequiredByBackend ? clientPasswordHash : undefined,
+                    referenceImages: referenceImagesPayload.length ? referenceImagesPayload : undefined,
+                    videoHasReferenceImage: targetMode === 'video' ? videoHasReferenceImage : undefined
                 })
             });
 
@@ -370,6 +477,162 @@ export default function HomePage() {
             setEnhanceError(message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleVideoSubmit = async (formData: VideoFormData) => {
+        const startTime = Date.now();
+        if (videoPollTimeoutRef.current) {
+            clearTimeout(videoPollTimeoutRef.current);
+            videoPollTimeoutRef.current = null;
+        }
+
+        setIsGeneratingVideo(true);
+        setError(null);
+        setLatestVideoBatch(null);
+        setVideoViewIndex(0);
+
+        if (isPasswordRequiredByBackend && !clientPasswordHash) {
+            setError('Password is required. Please configure the password by clicking the lock icon.');
+            setPasswordDialogContext('initial');
+            setIsPasswordDialogOpen(true);
+            setIsGeneratingVideo(false);
+            return;
+        }
+
+        const apiFormData = new FormData();
+        apiFormData.append('prompt', formData.prompt);
+        apiFormData.append('size', formData.size);
+        apiFormData.append('seconds', formData.seconds.toString());
+        if (formData.referenceImage) {
+            apiFormData.append('reference_image', formData.referenceImage, formData.referenceImage.name);
+        }
+
+        if (isPasswordRequiredByBackend && clientPasswordHash) {
+            apiFormData.append('passwordHash', clientPasswordHash);
+        }
+
+        try {
+            const response = await fetch('/api/video', {
+                method: 'POST',
+                body: apiFormData
+            });
+
+            const rawText = await response.text();
+            let result: any = null;
+            try {
+                result = JSON.parse(rawText);
+            } catch {
+                // keep rawText for error display
+            }
+
+            if (!response.ok) {
+                if (response.status === 401 && isPasswordRequiredByBackend) {
+                    setError('Unauthorized: Invalid or missing password. Please try again.');
+                    setPasswordDialogContext('retry');
+                    setIsPasswordDialogOpen(true);
+                    return;
+                }
+                const fallback = (result && result.error) || rawText || `Video API request failed with status ${response.status}`;
+                throw new Error(typeof fallback === 'string' ? fallback : 'Video API request failed.');
+            }
+
+            const jobId: string | undefined = result?.jobId;
+            if (!jobId) {
+                throw new Error('Video API did not return a job id.');
+            }
+
+            const maxAttempts = 90;
+            const pollDelayMs = 2000;
+
+            const pollStatus = async (attempt = 0) => {
+                try {
+                    const statusResp = await fetch(`/api/video?jobId=${encodeURIComponent(jobId)}`);
+                    const statusText = await statusResp.text();
+
+                    let statusJson: any = null;
+                    try {
+                        statusJson = JSON.parse(statusText);
+                    } catch {
+                        throw new Error(`Unexpected response while polling video: ${statusText?.slice(0, 200)}`);
+                    }
+
+                    if (!statusResp.ok) {
+                        const msg = statusJson?.error || `Video status check failed (${statusResp.status})`;
+                        throw new Error(msg);
+                    }
+
+                    const status = (statusJson.status as string | undefined)?.toLowerCase() || 'queued';
+
+                    if (status === 'succeeded' || status === 'completed') {
+                        if (statusJson.videos && statusJson.videos.length > 0) {
+                            const durationMs = Date.now() - startTime;
+                            setLatestVideoBatch(statusJson.videos);
+                            setMode('video');
+                            setVideoViewIndex(0);
+
+                            const batchTimestamp = Date.now();
+                            const videoCostDetails = calculateSoraVideoCost(formData.seconds);
+                            const newHistoryEntry: HistoryMetadata = {
+                                timestamp: batchTimestamp,
+                                videos: statusJson.videos.map((vid: { filename: string }) => ({ filename: vid.filename })),
+                                storageModeUsed: 'fs',
+                                durationMs,
+                                quality: 'auto',
+                                background: 'auto',
+                                moderation: 'auto',
+                                prompt: formData.prompt,
+                                mode: 'video',
+                                costDetails: videoCostDetails,
+                                videoSize: formData.size,
+                                videoSeconds: formData.seconds,
+                                model: statusJson.model || 'sora-2'
+                            };
+
+                            setHistory((prevHistory) => [newHistoryEntry, ...prevHistory]);
+                        } else {
+                            throw new Error('Video status succeeded but no video was returned.');
+                        }
+
+                        if (videoPollTimeoutRef.current) {
+                            clearTimeout(videoPollTimeoutRef.current);
+                            videoPollTimeoutRef.current = null;
+                        }
+                        setIsGeneratingVideo(false);
+                        return;
+                    }
+
+                    if (['queued', 'running', 'in_progress', 'processing', 'notstarted'].includes(status)) {
+                        if (attempt >= maxAttempts) {
+                            throw new Error('Video generation timed out while polling.');
+                        }
+                        videoPollTimeoutRef.current = setTimeout(() => {
+                            pollStatus(attempt + 1);
+                        }, pollDelayMs);
+                        return;
+                    }
+
+                    const failureReason = statusJson?.error || `Video generation failed with status: ${status}`;
+                    throw new Error(failureReason);
+                } catch (err: unknown) {
+                    if (videoPollTimeoutRef.current) {
+                        clearTimeout(videoPollTimeoutRef.current);
+                        videoPollTimeoutRef.current = null;
+                    }
+
+                    const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while polling video status.';
+                    setError(errorMessage);
+                    setLatestVideoBatch(null);
+                    setIsGeneratingVideo(false);
+                }
+            };
+
+            pollStatus(0);
+        } catch (err: unknown) {
+            const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while creating video.';
+            setError(errorMessage);
+            setLatestVideoBatch(null);
+            setIsGeneratingVideo(false);
         }
     };
 
@@ -747,39 +1010,49 @@ export default function HomePage() {
             `Selecting history item from ${new Date(item.timestamp).toISOString()}, stored via: ${item.storageModeUsed}`
         );
         const originalStorageMode = item.storageModeUsed || 'fs';
+        const isVideoEntry = item.mode === 'video';
+        const assets = item.videos && item.videos.length > 0 ? item.videos : item.images || [];
 
-        const selectedBatchPromises = item.images.map(async (imgInfo) => {
+        const selectedBatchPromises = assets.map(async (asset) => {
             let path: string | undefined;
+
             if (originalStorageMode === 'indexeddb') {
-                path = getImageSrc(imgInfo.filename);
+                path = getImageSrc(asset.filename);
             } else {
-                path = `/api/image/${imgInfo.filename}`;
+                path = `/api/image/${asset.filename}`;
             }
 
             if (path) {
-                return { path, filename: imgInfo.filename };
+                return { path, filename: asset.filename };
             } else {
                 console.warn(
-                    `Could not get image source for history item: ${imgInfo.filename} (mode: ${originalStorageMode})`
+                    `Could not get asset source for history item: ${asset.filename} (mode: ${originalStorageMode})`
                 );
-                setError(`Image ${imgInfo.filename} could not be loaded.`);
+                setError(`Asset ${asset.filename} could not be loaded.`);
                 return null;
             }
         });
 
         Promise.all(selectedBatchPromises).then((resolvedBatch) => {
-            const validImages = resolvedBatch.filter(Boolean) as { path: string; filename: string }[];
+            const validAssets = resolvedBatch.filter(Boolean) as { path: string; filename: string }[];
 
-            if (validImages.length !== item.images.length && !error) {
+            if (validAssets.length !== assets.length && !error) {
                 setError(
-                    'Some images from this history entry could not be loaded (they might have been cleared or are missing).'
+                    'Some items from this history entry could not be loaded (they might have been cleared or are missing).'
                 );
-            } else if (validImages.length === item.images.length) {
+            } else if (validAssets.length === assets.length) {
                 setError(null);
             }
 
-            setLatestImageBatch(validImages.length > 0 ? validImages : null);
-            setImageOutputView(validImages.length > 1 ? 'grid' : 0);
+            if (isVideoEntry) {
+                setLatestVideoBatch(validAssets.length > 0 ? validAssets : null);
+                setMode('video');
+                setVideoViewIndex(0);
+            } else {
+                setLatestImageBatch(validAssets.length > 0 ? validAssets : null);
+                setImageOutputView(validAssets.length > 1 ? 'grid' : 0);
+                setMode(item.mode);
+            }
         });
     };
 
@@ -792,7 +1065,9 @@ export default function HomePage() {
         if (window.confirm(confirmationMessage)) {
             setHistory([]);
             setLatestImageBatch(null);
+            setLatestVideoBatch(null);
             setImageOutputView('grid');
+            setVideoViewIndex(0);
             setError(null);
 
             try {
@@ -884,13 +1159,62 @@ export default function HomePage() {
         }
     };
 
+    const handleSendToVideo = async (filename: string) => {
+        if (isGeneratingVideo) return;
+        setIsGeneratingVideo(true);
+        setError(null);
+
+        try {
+            let blob: Blob | undefined;
+            let mimeType: string = 'image/png';
+
+            if (effectiveStorageModeClient === 'indexeddb') {
+                const record = allDbImages?.find((img) => img.filename === filename);
+                if (record?.blob) {
+                    blob = record.blob;
+                    mimeType = blob.type || mimeType;
+                } else {
+                    throw new Error(`Image ${filename} not found in local database.`);
+                }
+            } else {
+                const response = await fetch(`/api/image/${filename}`);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch image: ${response.statusText}`);
+                }
+                blob = await response.blob();
+                mimeType = response.headers.get('Content-Type') || mimeType;
+            }
+
+            if (!blob) {
+                throw new Error(`Could not retrieve image data for ${filename}.`);
+            }
+
+            const newFile = new File([blob], filename, { type: mimeType });
+            const previewUrl = URL.createObjectURL(blob);
+
+            if (videoReferencePreviewUrl && videoReferencePreviewUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(videoReferencePreviewUrl);
+            }
+
+            setVideoReferenceImage(newFile);
+            setVideoReferencePreviewUrl(previewUrl);
+            setMode('video');
+        } catch (err: unknown) {
+            console.error('Error sending image to video:', err);
+            const errorMessage = err instanceof Error ? err.message : 'Failed to send image to video form.';
+            setError(errorMessage);
+        } finally {
+            setIsGeneratingVideo(false);
+        }
+    };
+
     const executeDeleteItem = async (item: HistoryMetadata) => {
         if (!item) return;
         console.log(`Executing delete for history item timestamp: ${item.timestamp}`);
         setError(null); // Clear previous errors
 
-        const { images: imagesInEntry, storageModeUsed, timestamp } = item;
-        const filenamesToDelete = imagesInEntry.map((img) => img.filename);
+        const { images: imagesInEntry = [], videos: videosInEntry = [], storageModeUsed, timestamp } = item;
+        const filenamesToDelete = [...imagesInEntry, ...videosInEntry].map((asset) => asset.filename);
 
         try {
             if (storageModeUsed === 'indexeddb') {
@@ -953,6 +1277,19 @@ export default function HomePage() {
 
     const handleCancelDeletion = () => {
         setItemToDeleteConfirm(null);
+    };
+
+    const handleReusePrompt = (prompt: string, targetMode: 'generate' | 'edit' | 'video') => {
+        if (targetMode === 'generate') {
+            setGenPrompt(prompt);
+            setMode('generate');
+        } else if (targetMode === 'edit') {
+            setEditPrompt(prompt);
+            setMode('edit');
+        } else if (targetMode === 'video') {
+            setVideoPrompt(prompt);
+            setMode('video');
+        }
     };
 
     return (
@@ -1048,6 +1385,30 @@ export default function HomePage() {
                                 enhanceError={editPromptEnhanceError}
                             />
                         </div>
+                        <div className={mode === 'video' ? 'block h-full w-full' : 'hidden'}>
+                            <VideoForm
+                                onSubmit={handleVideoSubmit}
+                                isLoading={isGeneratingVideo}
+                                currentMode={mode}
+                                onModeChange={setMode}
+                                isPasswordRequiredByBackend={isPasswordRequiredByBackend}
+                                clientPasswordHash={clientPasswordHash}
+                                onOpenPasswordDialog={handleOpenPasswordDialog}
+                                prompt={videoPrompt}
+                                setPrompt={setVideoPrompt}
+                                size={videoSize}
+                                setSize={setVideoSize}
+                                seconds={videoSeconds}
+                                setSeconds={setVideoSeconds}
+                                referenceImage={videoReferenceImage}
+                                setReferenceImage={setVideoReferenceImage}
+                                referencePreviewUrl={videoReferencePreviewUrl}
+                                setReferencePreviewUrl={setVideoReferencePreviewUrl}
+                                onEnhancePrompt={() => handlePromptEnhance('video')}
+                                isEnhancingPrompt={isEnhancingVideoPrompt}
+                                enhanceError={videoPromptEnhanceError}
+                            />
+                        </div>
                     </div>
                     <div className='flex h-[70vh] min-h-[600px] flex-col lg:col-span-1'>
                         {error && (
@@ -1056,17 +1417,27 @@ export default function HomePage() {
                                 <AlertDescription>{error}</AlertDescription>
                             </Alert>
                         )}
-                        <ImageOutput
-                            imageBatch={latestImageBatch}
-                            viewMode={imageOutputView}
-                            onViewChange={setImageOutputView}
-                            altText='Generated image output'
-                            isLoading={isLoading || isSendingToEdit}
-                            onSendToEdit={handleSendToEdit}
-                            currentMode={mode}
-                            baseImagePreviewUrl={editSourceImagePreviewUrls[0] || null}
-                            streamingPreviewImages={streamingPreviewImages}
-                        />
+                        {mode === 'video' ? (
+                            <VideoOutput
+                                videoBatch={latestVideoBatch}
+                                viewIndex={videoViewIndex}
+                                onViewChange={setVideoViewIndex}
+                                isLoading={isGeneratingVideo}
+                            />
+                        ) : (
+                                <ImageOutput
+                                    imageBatch={latestImageBatch}
+                                    viewMode={imageOutputView}
+                                    onViewChange={setImageOutputView}
+                                    altText='Generated image output'
+                                    isLoading={isLoading || isSendingToEdit}
+                                    onSendToEdit={handleSendToEdit}
+                                    currentMode={mode}
+                                    baseImagePreviewUrl={editSourceImagePreviewUrls[0] || null}
+                                    streamingPreviewImages={streamingPreviewImages}
+                                    onSendToVideo={handleSendToVideo}
+                                />
+                        )}
                     </div>
                 </div>
 
@@ -1082,6 +1453,7 @@ export default function HomePage() {
                         onCancelDeletion={handleCancelDeletion}
                         deletePreferenceDialogValue={dialogCheckboxStateSkipConfirm}
                         onDeletePreferenceDialogChange={setDialogCheckboxStateSkipConfirm}
+                        onReusePrompt={handleReusePrompt}
                     />
                 </div>
             </div>

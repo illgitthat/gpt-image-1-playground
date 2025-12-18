@@ -24,7 +24,12 @@ import {
     BrickWall,
     Lock,
     LockOpen,
-    HelpCircle
+    HelpCircle,
+    Copy,
+    Check,
+    ChevronDown,
+    ChevronRight,
+    Settings2
 } from 'lucide-react';
 import * as React from 'react';
 
@@ -43,8 +48,8 @@ export type GenerationFormData = {
 type GenerationFormProps = {
     onSubmit: (data: GenerationFormData) => void;
     isLoading: boolean;
-    currentMode: 'generate' | 'edit';
-    onModeChange: (mode: 'generate' | 'edit') => void;
+    currentMode: 'generate' | 'edit' | 'video';
+    onModeChange: (mode: 'generate' | 'edit' | 'video') => void;
     isPasswordRequiredByBackend: boolean | null;
     clientPasswordHash: string | null;
     onOpenPasswordDialog: () => void;
@@ -128,10 +133,23 @@ export function GenerationForm({
     enhanceError
 }: GenerationFormProps) {
     const showCompression = outputFormat === 'jpeg' || outputFormat === 'webp';
+    const [isCopied, setIsCopied] = React.useState(false);
+    const [isAdvancedOpen, setIsAdvancedOpen] = React.useState(false);
 
     React.useEffect(() => {
         setModel('gpt-image-1.5');
     }, [setModel]);
+
+    const handleCopyPrompt = async () => {
+        if (!prompt) return;
+        try {
+            await navigator.clipboard.writeText(prompt);
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 2000);
+        } catch (err) {
+            console.error('Failed to copy prompt:', err);
+        }
+    };
 
     const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -237,6 +255,23 @@ export function GenerationForm({
                                             type='button'
                                             variant='ghost'
                                             size='sm'
+                                            onClick={handleCopyPrompt}
+                                            disabled={!prompt.trim()}
+                                            className='h-8 w-8 rounded-full border border-white/15 bg-white/5 p-0 text-white/80 hover:bg-white/15 hover:text-white'>
+                                            {isCopied ? <Check className='h-4 w-4 text-green-400' /> : <Copy className='h-4 w-4' />}
+                                            <span className='sr-only'>Copy prompt</span>
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent className='bg-black text-white'>
+                                        {isCopied ? 'Copied!' : 'Copy prompt'}
+                                    </TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            type='button'
+                                            variant='ghost'
+                                            size='sm'
                                             onClick={onEnhancePrompt}
                                             disabled={isLoading || isEnhancingPrompt || !prompt.trim()}
                                             className='h-8 gap-1 rounded-full border border-white/15 bg-white/5 px-3 text-xs text-white/80 hover:bg-white/15 hover:text-white'>
@@ -305,80 +340,98 @@ export function GenerationForm({
                         </RadioGroup>
                     </div>
 
-                    <div className='space-y-3'>
-                        <Label className='block text-white'>Quality</Label>
-                        <RadioGroup
-                            value={quality}
-                            onValueChange={(value) => setQuality(value as GenerationFormData['quality'])}
-                            disabled={isLoading}
-                            className='flex flex-wrap gap-x-5 gap-y-3'>
-                            <RadioItemWithIcon value='auto' id='quality-auto' label='Auto' Icon={Sparkles} />
-                            <RadioItemWithIcon value='low' id='quality-low' label='Low' Icon={Tally1} />
-                            <RadioItemWithIcon value='medium' id='quality-medium' label='Medium' Icon={Tally2} />
-                            <RadioItemWithIcon value='high' id='quality-high' label='High' Icon={Tally3} />
-                        </RadioGroup>
+                    <div className='pt-2'>
+                        <Button
+                            type='button'
+                            variant='ghost'
+                            onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+                            className='flex w-full items-center justify-between rounded-md border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white hover:bg-white/10'>
+                            <div className='flex items-center gap-2'>
+                                <Settings2 className='h-4 w-4' />
+                                Advanced Settings
+                            </div>
+                            {isAdvancedOpen ? <ChevronDown className='h-4 w-4' /> : <ChevronRight className='h-4 w-4' />}
+                        </Button>
                     </div>
 
-                    <div className='space-y-3'>
-                        <Label className='block text-white'>Background</Label>
-                        <RadioGroup
-                            value={background}
-                            onValueChange={(value) => setBackground(value as GenerationFormData['background'])}
-                            disabled={isLoading}
-                            className='flex flex-wrap gap-x-5 gap-y-3'>
-                            <RadioItemWithIcon value='auto' id='bg-auto' label='Auto' Icon={Sparkles} />
-                            <RadioItemWithIcon value='opaque' id='bg-opaque' label='Opaque' Icon={BrickWall} />
-                            <RadioItemWithIcon
-                                value='transparent'
-                                id='bg-transparent'
-                                label='Transparent'
-                                Icon={Eraser}
-                            />
-                        </RadioGroup>
-                    </div>
+                    {isAdvancedOpen && (
+                        <div className='space-y-5 rounded-md border border-white/10 bg-black/20 p-4 animate-in fade-in slide-in-from-top-2 duration-200'>
+                            <div className='space-y-3'>
+                                <Label className='block text-white'>Quality</Label>
+                                <RadioGroup
+                                    value={quality}
+                                    onValueChange={(value) => setQuality(value as GenerationFormData['quality'])}
+                                    disabled={isLoading}
+                                    className='flex flex-wrap gap-x-5 gap-y-3'>
+                                    <RadioItemWithIcon value='auto' id='quality-auto' label='Auto' Icon={Sparkles} />
+                                    <RadioItemWithIcon value='low' id='quality-low' label='Low' Icon={Tally1} />
+                                    <RadioItemWithIcon value='medium' id='quality-medium' label='Medium' Icon={Tally2} />
+                                    <RadioItemWithIcon value='high' id='quality-high' label='High' Icon={Tally3} />
+                                </RadioGroup>
+                            </div>
 
-                    <div className='space-y-3'>
-                        <Label className='block text-white'>Output Format</Label>
-                        <RadioGroup
-                            value={outputFormat}
-                            onValueChange={(value) => setOutputFormat(value as GenerationFormData['output_format'])}
-                            disabled={isLoading}
-                            className='flex flex-wrap gap-x-5 gap-y-3'>
-                            <RadioItemWithIcon value='png' id='format-png' label='PNG' Icon={FileImage} />
-                            <RadioItemWithIcon value='jpeg' id='format-jpeg' label='JPEG' Icon={FileImage} />
-                            <RadioItemWithIcon value='webp' id='format-webp' label='WebP' Icon={FileImage} />
-                        </RadioGroup>
-                    </div>
+                            <div className='space-y-3'>
+                                <Label className='block text-white'>Background</Label>
+                                <RadioGroup
+                                    value={background}
+                                    onValueChange={(value) => setBackground(value as GenerationFormData['background'])}
+                                    disabled={isLoading}
+                                    className='flex flex-wrap gap-x-5 gap-y-3'>
+                                    <RadioItemWithIcon value='auto' id='bg-auto' label='Auto' Icon={Sparkles} />
+                                    <RadioItemWithIcon value='opaque' id='bg-opaque' label='Opaque' Icon={BrickWall} />
+                                    <RadioItemWithIcon
+                                        value='transparent'
+                                        id='bg-transparent'
+                                        label='Transparent'
+                                        Icon={Eraser}
+                                    />
+                                </RadioGroup>
+                            </div>
 
-                    {showCompression && (
-                        <div className='space-y-2 pt-2 transition-opacity duration-300'>
-                            <Label htmlFor='compression-slider' className='text-white'>
-                                Compression: {compression[0]}%
-                            </Label>
-                            <Slider
-                                id='compression-slider'
-                                min={0}
-                                max={100}
-                                step={1}
-                                value={compression}
-                                onValueChange={setCompression}
-                                disabled={isLoading}
-                                className='mt-3 [&>button]:border-black [&>button]:bg-white [&>button]:ring-offset-black [&>span:first-child]:h-1 [&>span:first-child>span]:bg-white'
-                            />
+                            <div className='space-y-3'>
+                                <Label className='block text-white'>Output Format</Label>
+                                <RadioGroup
+                                    value={outputFormat}
+                                    onValueChange={(value) => setOutputFormat(value as GenerationFormData['output_format'])}
+                                    disabled={isLoading}
+                                    className='flex flex-wrap gap-x-5 gap-y-3'>
+                                    <RadioItemWithIcon value='png' id='format-png' label='PNG' Icon={FileImage} />
+                                    <RadioItemWithIcon value='jpeg' id='format-jpeg' label='JPEG' Icon={FileImage} />
+                                    <RadioItemWithIcon value='webp' id='format-webp' label='WebP' Icon={FileImage} />
+                                </RadioGroup>
+                            </div>
+
+                            {showCompression && (
+                                <div className='space-y-2 pt-2 transition-opacity duration-300'>
+                                    <Label htmlFor='compression-slider' className='text-white'>
+                                        Compression: {compression[0]}%
+                                    </Label>
+                                    <Slider
+                                        id='compression-slider'
+                                        min={0}
+                                        max={100}
+                                        step={1}
+                                        value={compression}
+                                        onValueChange={setCompression}
+                                        disabled={isLoading}
+                                        className='mt-3 [&>button]:border-black [&>button]:bg-white [&>button]:ring-offset-black [&>span:first-child]:h-1 [&>span:first-child>span]:bg-white'
+                                    />
+                                </div>
+                            )}
+
+                            <div className='space-y-3'>
+                                <Label className='block text-white'>Moderation Level</Label>
+                                <RadioGroup
+                                    value={moderation}
+                                    onValueChange={(value) => setModeration(value as GenerationFormData['moderation'])}
+                                    disabled={isLoading}
+                                    className='flex flex-wrap gap-x-5 gap-y-3'>
+                                    <RadioItemWithIcon value='auto' id='mod-auto' label='Auto' Icon={ShieldCheck} />
+                                    <RadioItemWithIcon value='low' id='mod-low' label='Low' Icon={ShieldAlert} />
+                                </RadioGroup>
+                            </div>
                         </div>
                     )}
-
-                    <div className='space-y-3'>
-                        <Label className='block text-white'>Moderation Level</Label>
-                        <RadioGroup
-                            value={moderation}
-                            onValueChange={(value) => setModeration(value as GenerationFormData['moderation'])}
-                            disabled={isLoading}
-                            className='flex flex-wrap gap-x-5 gap-y-3'>
-                            <RadioItemWithIcon value='auto' id='mod-auto' label='Auto' Icon={ShieldCheck} />
-                            <RadioItemWithIcon value='low' id='mod-low' label='Low' Icon={ShieldAlert} />
-                        </RadioGroup>
-                    </div>
                 </CardContent>
                 <CardFooter className='border-t border-white/10 p-4'>
                     <Button

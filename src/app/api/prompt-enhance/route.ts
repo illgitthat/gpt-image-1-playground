@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI, { AzureOpenAI } from 'openai';
-import { buildPromptEnhanceMessages } from '@/lib/prompt-enhance';
+import { buildPromptEnhanceMessages, type PromptEnhanceImagePayload } from '@/lib/prompt-enhance';
 
 const azureConfig = {
     apiKey: process.env.AZURE_OPENAI_API_KEY,
@@ -44,6 +44,39 @@ function extractText(content: unknown): string {
     return '';
 }
 
+function sanitizeReferenceImages(input: unknown): PromptEnhanceImagePayload[] {
+    if (!Array.isArray(input)) return [];
+
+    const maxImages = 5;
+    const sanitized: PromptEnhanceImagePayload[] = [];
+
+    for (const candidate of input) {
+        if (sanitized.length >= maxImages) break;
+
+        if (typeof candidate === 'string') {
+            if (candidate.startsWith('data:image')) {
+                sanitized.push({ dataUrl: candidate });
+            }
+            continue;
+        }
+
+        if (candidate && typeof candidate === 'object') {
+            const dataUrl = typeof (candidate as { dataUrl?: string }).dataUrl === 'string'
+                ? (candidate as { dataUrl?: string }).dataUrl
+                : undefined;
+            const alt = typeof (candidate as { alt?: string }).alt === 'string'
+                ? (candidate as { alt?: string }).alt
+                : undefined;
+
+            if (dataUrl && dataUrl.startsWith('data:image')) {
+                sanitized.push({ dataUrl, alt });
+            }
+        }
+    }
+
+    return sanitized;
+}
+
 export async function POST(request: NextRequest) {
     if (useAzure) {
         if (!azureConfig.apiKey || !azureConfig.endpoint || !azureConfig.apiVersion || !azureDeploymentForEnhance) {
@@ -59,7 +92,9 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
         const prompt = (body?.prompt as string | undefined)?.trim();
-        const mode = body?.mode as 'generate' | 'edit' | undefined;
+        const mode = body?.mode as 'generate' | 'edit' | 'video' | undefined;
+        const referenceImages = sanitizeReferenceImages(body?.referenceImages);
+        const videoHasReferenceImage = Boolean(body?.videoHasReferenceImage) || referenceImages.length > 0;
         const clientPasswordHash = body?.passwordHash as string | undefined;
 
         if (!prompt || !mode) {
@@ -76,7 +111,10 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        const messages = buildPromptEnhanceMessages(mode, prompt);
+        const messages = buildPromptEnhanceMessages(mode, prompt, {
+            referenceImages,
+            videoHasReferenceImage
+        });
         const modelToUse = useAzure ? azureDeploymentForEnhance! : promptEnhanceModel;
 
         const apiClient = useAzure

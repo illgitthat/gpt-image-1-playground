@@ -25,7 +25,8 @@ import {
     HardDrive,
     Database,
     FileImage,
-    Trash2
+    Trash2,
+    ArrowUpRight
 } from 'lucide-react';
 import Image from 'next/image';
 import * as React from 'react';
@@ -41,6 +42,7 @@ type HistoryPanelProps = {
     onCancelDeletion: () => void;
     deletePreferenceDialogValue: boolean;
     onDeletePreferenceDialogChange: (isChecked: boolean) => void;
+    onReusePrompt: (prompt: string, mode: 'generate' | 'edit' | 'video') => void;
 };
 
 const formatDuration = (ms: number): string => {
@@ -52,7 +54,7 @@ const formatDuration = (ms: number): string => {
 
 const calculateCost = (value: number, rate: number): string => {
     const cost = value * rate;
-    return isNaN(cost) ? 'N/A' : cost.toFixed(4);
+    return isNaN(cost) ? 'N/A' : cost.toFixed(2);
 };
 
 export function HistoryPanel({
@@ -65,7 +67,8 @@ export function HistoryPanel({
     onConfirmDeletion,
     onCancelDeletion,
     deletePreferenceDialogValue,
-    onDeletePreferenceDialogChange
+    onDeletePreferenceDialogChange,
+    onReusePrompt
 }: HistoryPanelProps) {
     const [openPromptDialogTimestamp, setOpenPromptDialogTimestamp] = React.useState<number | null>(null);
     const [openCostDialogTimestamp, setOpenCostDialogTimestamp] = React.useState<number | null>(null);
@@ -82,7 +85,7 @@ export function HistoryPanel({
             images += item.images?.length ?? 0;
         });
 
-        return { totalCost: Math.round(cost * 10000) / 10000, totalImages: images };
+        return { totalCost: Math.round(cost * 100) / 100, totalImages: images };
     }, [history]);
 
     const averageCost = totalImages > 0 ? totalCost / totalImages : 0;
@@ -107,9 +110,9 @@ export function HistoryPanel({
                         <Dialog open={isTotalCostDialogOpen} onOpenChange={setIsTotalCostDialogOpen}>
                             <DialogTrigger asChild>
                                 <button
-                                    className='mt-0.5 flex items-center gap-1 rounded-full bg-green-600/80 px-1.5 py-0.5 text-[12px] text-white transition-colors hover:bg-green-500/90'
+                                    className='mt-0.5 flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-[12px] text-green-400 transition-colors hover:bg-green-500/20 hover:text-green-300'
                                     aria-label='Show total cost summary'>
-                                    Total Estimated Cost: ${totalCost.toFixed(4)}
+                                    Total Estimated Cost: ${totalCost.toFixed(2)}
                                 </button>
                             </DialogTrigger>
                             <DialogContent className='border-neutral-700 bg-neutral-900 text-white sm:max-w-[450px]'>
@@ -145,12 +148,12 @@ export function HistoryPanel({
                                         <span>Total Images Generated:</span> <span>{totalImages.toLocaleString()}</span>
                                     </div>
                                     <div className='flex justify-between'>
-                                        <span>Average Cost Per Image:</span> <span>${averageCost.toFixed(4)}</span>
+                                        <span>Average Cost Per Image:</span> <span>${averageCost.toFixed(2)}</span>
                                     </div>
                                     <hr className='my-2 border-neutral-700' />
                                     <div className='flex justify-between font-medium text-white'>
                                         <span>Total Estimated Cost:</span>
-                                        <span>${totalCost.toFixed(4)}</span>
+                                        <span>${totalCost.toFixed(2)}</span>
                                     </div>
                                 </div>
                                 <DialogFooter>
@@ -186,19 +189,22 @@ export function HistoryPanel({
                 ) : (
                     <div className='grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'>
                         {[...history].map((item) => {
-                            const firstImage = item.images?.[0];
-                            const imageCount = item.images?.length ?? 0;
-                            const isMultiImage = imageCount > 1;
+                            const mediaItems = item.videos && item.videos.length > 0 ? item.videos : item.images;
+                            const firstMedia = mediaItems?.[0];
+                            const mediaCount = mediaItems?.length ?? 0;
+                            const isMultiImage = mediaCount > 1;
                             const itemKey = item.timestamp;
                             const originalStorageMode = item.storageModeUsed || 'fs';
                             const outputFormat = item.output_format || 'png';
 
+                            const isVideo = item.mode === 'video';
+
                             let thumbnailUrl: string | undefined;
-                            if (firstImage) {
+                            if (firstMedia) {
                                 if (originalStorageMode === 'indexeddb') {
-                                    thumbnailUrl = getImageSrc(firstImage.filename);
+                                    thumbnailUrl = getImageSrc(firstMedia.filename);
                                 } else {
-                                    thumbnailUrl = `/api/image/${firstImage.filename}`;
+                                    thumbnailUrl = `/api/image/${firstMedia.filename}`;
                                 }
                             }
 
@@ -210,14 +216,24 @@ export function HistoryPanel({
                                             className='relative block aspect-square w-full overflow-hidden rounded-t-md border border-white/20 transition-all duration-150 group-hover:border-white/40 focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black focus:outline-none'
                                             aria-label={`View image batch from ${new Date(item.timestamp).toLocaleString()}`}>
                                             {thumbnailUrl ? (
-                                                <Image
-                                                    src={thumbnailUrl}
-                                                    alt={`Preview for batch generated at ${new Date(item.timestamp).toLocaleString()}`}
-                                                    width={150}
-                                                    height={150}
-                                                    className='h-full w-full object-cover'
-                                                    unoptimized
-                                                />
+                                                isVideo ? (
+                                                    <video
+                                                        src={thumbnailUrl}
+                                                        muted
+                                                        playsInline
+                                                        loop
+                                                        className='h-full w-full object-cover'
+                                                    />
+                                                ) : (
+                                                        <Image
+                                                            src={thumbnailUrl}
+                                                            alt={`Preview for batch generated at ${new Date(item.timestamp).toLocaleString()}`}
+                                                            width={150}
+                                                            height={150}
+                                                            className='h-full w-full object-cover'
+                                                            unoptimized
+                                                        />
+                                                    )
                                             ) : (
                                                 <div className='flex h-full w-full items-center justify-center bg-neutral-800 text-neutral-500'>
                                                     ?
@@ -226,19 +242,25 @@ export function HistoryPanel({
                                             <div
                                                 className={cn(
                                                     'pointer-events-none absolute top-1 left-1 z-10 flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] text-white',
-                                                    item.mode === 'edit' ? 'bg-orange-600/80' : 'bg-blue-600/80'
+                                                    item.mode === 'edit'
+                                                        ? 'bg-orange-600/80'
+                                                        : item.mode === 'video'
+                                                            ? 'bg-purple-600/80'
+                                                            : 'bg-blue-600/80'
                                                 )}>
                                                 {item.mode === 'edit' ? (
                                                     <Pencil size={12} />
+                                                ) : item.mode === 'video' ? (
+                                                    <SparklesIcon size={12} />
                                                 ) : (
                                                     <SparklesIcon size={12} />
                                                 )}
-                                                {item.mode === 'edit' ? 'Edit' : 'Create'}
+                                                {item.mode === 'edit' ? 'Edit' : item.mode === 'video' ? 'Video' : 'Create'}
                                             </div>
                                             {isMultiImage && (
                                                 <div className='pointer-events-none absolute right-1 bottom-1 z-10 flex items-center gap-1 rounded-full bg-black/70 px-1.5 py-0.5 text-[12px] text-white'>
                                                     <Layers size={16} />
-                                                    {imageCount}
+                                                    {mediaCount}
                                                 </div>
                                             )}
                                             <div className='pointer-events-none absolute bottom-1 left-1 z-10 flex items-center gap-1'>
@@ -250,7 +272,7 @@ export function HistoryPanel({
                                                     )}
                                                     <span>{originalStorageMode === 'fs' ? 'file' : 'db'}</span>
                                                 </div>
-                                                {item.output_format && (
+                                                {item.output_format && !isVideo && (
                                                     <div className='flex items-center gap-1 rounded-full border border-white/10 bg-neutral-900/80 px-1 py-0.5 text-[11px] text-white/70'>
                                                         <FileImage size={12} className='text-neutral-400' />
                                                         <span>{outputFormat.toUpperCase()}</span>
@@ -268,10 +290,10 @@ export function HistoryPanel({
                                                             e.stopPropagation();
                                                             setOpenCostDialogTimestamp(itemKey);
                                                         }}
-                                                        className='absolute top-1 right-1 z-20 flex items-center gap-0.5 rounded-full bg-green-600/80 px-1.5 py-0.5 text-[11px] text-white transition-colors hover:bg-green-500/90'
+                                                        className='absolute top-1 right-1 z-20 flex items-center gap-0.5 rounded-full bg-black/40 px-1.5 py-0.5 text-[11px] text-white/70 backdrop-blur-sm transition-colors hover:bg-black/60 hover:text-white'
                                                         aria-label='Show cost breakdown'>
                                                         <DollarSign size={12} />
-                                                        {item.costDetails.estimated_cost_usd.toFixed(4)}
+                                                        {item.costDetails.estimated_cost_usd.toFixed(2)}
                                                     </button>
                                                 </DialogTrigger>
                                                 <DialogContent className='border-neutral-700 bg-neutral-900 text-white sm:max-w-[450px]'>
@@ -281,77 +303,107 @@ export function HistoryPanel({
                                                             Estimated cost breakdown for this image generation.
                                                         </DialogDescription>
                                                     </DialogHeader>
-                                                    <div className='space-y-1 pt-1 text-xs text-neutral-400'>
-                                                        <p>Pricing for {item.model || 'gpt-image-1'}:</p>
-                                                        <ul className='list-disc pl-4'>
-                                                            {(item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? (
-                                                                <>
-                                                                    <li>Text Input: $2 / 1M tokens</li>
-                                                                    <li>Image Input: $2.50 / 1M tokens</li>
-                                                                    <li>Image Output: $8 / 1M tokens</li>
-                                                                </>
-                                                            ) : (item.model || 'gpt-image-1') === 'gpt-image-1.5' ? (
-                                                                <>
-                                                                    <li>Text Input: $5 / 1M tokens</li>
-                                                                    <li>Image Input: $8 / 1M tokens</li>
-                                                                    <li>Image Output: $32 / 1M tokens</li>
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <li>Text Input: $5 / 1M tokens</li>
-                                                                    <li>Image Input: $10 / 1M tokens</li>
-                                                                    <li>Image Output: $40 / 1M tokens</li>
-                                                                </>
-                                                            )}
-                                                        </ul>
-                                                    </div>
-                                                    <div className='space-y-2 py-4 text-sm text-neutral-300'>
-                                                        <div className='flex justify-between'>
-                                                            <span>Text Input Tokens:</span>{' '}
-                                                            <span>
-                                                                {item.costDetails.text_input_tokens.toLocaleString()}{' '}
-                                                                (~$
-                                                                {calculateCost(
-                                                                    item.costDetails.text_input_tokens,
-                                                                    (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.000002 : 0.000005
-                                                                )}
-                                                                )
-                                                            </span>
-                                                        </div>
-                                                        {item.costDetails.image_input_tokens > 0 && (
-                                                            <div className='flex justify-between'>
-                                                                <span>Image Input Tokens:</span>{' '}
-                                                                <span>
-                                                                    {item.costDetails.image_input_tokens.toLocaleString()}{' '}
-                                                                    (~$
-                                                                    {calculateCost(
-                                                                        item.costDetails.image_input_tokens,
-                                                                        (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.0000025 : (item.model || 'gpt-image-1') === 'gpt-image-1.5' ? 0.000008 : 0.00001
-                                                                    )}
-                                                                    )
-                                                                </span>
+                                                    {item.mode === 'video' ? (
+                                                        <div className='space-y-3 py-3 text-sm text-neutral-300'>
+                                                            <div className='space-y-1 text-xs text-neutral-400'>
+                                                                <p>Pricing for Sora video:</p>
+                                                                <ul className='list-disc pl-4'>
+                                                                    <li>$0.10 per second</li>
+                                                                </ul>
                                                             </div>
-                                                        )}
-                                                        <div className='flex justify-between'>
-                                                            <span>Image Output Tokens:</span>{' '}
-                                                            <span>
-                                                                {item.costDetails.image_output_tokens.toLocaleString()}{' '}
-                                                                (~$
-                                                                {calculateCost(
-                                                                    item.costDetails.image_output_tokens,
-                                                                    (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.000008 : (item.model || 'gpt-image-1') === 'gpt-image-1.5' ? 0.000032 : 0.00004
+                                                            <div className='flex justify-between'>
+                                                                <span>Duration (s):</span>
+                                                                <span>{item.videoSeconds ?? 'N/A'}</span>
+                                                            </div>
+                                                            <hr className='my-2 border-neutral-700' />
+                                                            <div className='flex justify-between font-medium text-white'>
+                                                                <span>Total Estimated Cost:</span>
+                                                                <span>${item.costDetails.estimated_cost_usd.toFixed(2)}</span>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <div className='space-y-1 pt-1 text-xs text-neutral-400'>
+                                                                <p>Pricing for {item.model || 'gpt-image-1'}:</p>
+                                                                <ul className='list-disc pl-4'>
+                                                                    {(item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? (
+                                                                        <>
+                                                                            <li>Text Input: $2 / 1M tokens</li>
+                                                                            <li>Image Input: $2.50 / 1M tokens</li>
+                                                                            <li>Image Output: $8 / 1M tokens</li>
+                                                                        </>
+                                                                    ) : (item.model || 'gpt-image-1') === 'gpt-image-1.5' ? (
+                                                                        <>
+                                                                            <li>Text Input: $5 / 1M tokens</li>
+                                                                            <li>Image Input: $8 / 1M tokens</li>
+                                                                            <li>Image Output: $32 / 1M tokens</li>
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <li>Text Input: $5 / 1M tokens</li>
+                                                                            <li>Image Input: $10 / 1M tokens</li>
+                                                                            <li>Image Output: $40 / 1M tokens</li>
+                                                                        </>
+                                                                    )}
+                                                                </ul>
+                                                            </div>
+                                                            <div className='space-y-2 py-4 text-sm text-neutral-300'>
+                                                                <div className='flex justify-between'>
+                                                                    <span>Text Input Tokens:</span>{' '}
+                                                                    <span>
+                                                                        {item.costDetails.text_input_tokens.toLocaleString()}{' '}
+                                                                        (~$
+                                                                        {calculateCost(
+                                                                            item.costDetails.text_input_tokens,
+                                                                            (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.000002 : 0.000005
+                                                                        )}
+                                                                        )
+                                                                    </span>
+                                                                </div>
+                                                                {item.costDetails.image_input_tokens > 0 && (
+                                                                    <div className='flex justify-between'>
+                                                                        <span>Image Input Tokens:</span>{' '}
+                                                                        <span>
+                                                                            {item.costDetails.image_input_tokens.toLocaleString()}{' '}
+                                                                            (~$
+                                                                            {calculateCost(
+                                                                                item.costDetails.image_input_tokens,
+                                                                                (item.model || 'gpt-image-1') === 'gpt-image-1-mini'
+                                                                                    ? 0.0000025
+                                                                                    : (item.model || 'gpt-image-1') === 'gpt-image-1.5'
+                                                                                        ? 0.000008
+                                                                                        : 0.00001
+                                                                            )}
+                                                                            )
+                                                                        </span>
+                                                                    </div>
                                                                 )}
-                                                                )
-                                                            </span>
-                                                        </div>
-                                                        <hr className='my-2 border-neutral-700' />
-                                                        <div className='flex justify-between font-medium text-white'>
-                                                            <span>Total Estimated Cost:</span>
-                                                            <span>
-                                                                ${item.costDetails.estimated_cost_usd.toFixed(4)}
-                                                            </span>
-                                                        </div>
-                                                    </div>
+                                                                <div className='flex justify-between'>
+                                                                    <span>Image Output Tokens:</span>{' '}
+                                                                    <span>
+                                                                        {item.costDetails.image_output_tokens.toLocaleString()}{' '}
+                                                                        (~$
+                                                                        {calculateCost(
+                                                                            item.costDetails.image_output_tokens,
+                                                                            (item.model || 'gpt-image-1') === 'gpt-image-1-mini'
+                                                                                ? 0.000008
+                                                                                : (item.model || 'gpt-image-1') === 'gpt-image-1.5'
+                                                                                    ? 0.000032
+                                                                                    : 0.00004
+                                                                        )}
+                                                                        )
+                                                                    </span>
+                                                                </div>
+                                                                <hr className='my-2 border-neutral-700' />
+                                                                <div className='flex justify-between font-medium text-white'>
+                                                                    <span>Total Estimated Cost:</span>
+                                                                    <span>
+                                                                        ${item.costDetails.estimated_cost_usd.toFixed(2)}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </>
+                                                    )}
                                                     <DialogFooter>
                                                         <DialogClose asChild>
                                                             <Button
@@ -374,17 +426,33 @@ export function HistoryPanel({
                                             {formatDuration(item.durationMs)}
                                         </p>
                                         <p>
-                                            <span className='font-medium text-white/80'>Model:</span> {item.model || 'gpt-image-1'}
+                                            <span className='font-medium text-white/80'>Model:</span>{' '}
+                                            {item.model || (isVideo ? 'sora-2' : 'gpt-image-1')}
                                         </p>
-                                        <p>
-                                            <span className='font-medium text-white/80'>Quality:</span> {item.quality}
-                                        </p>
-                                        <p>
-                                            <span className='font-medium text-white/80'>BG:</span> {item.background}
-                                        </p>
-                                        <p>
-                                            <span className='font-medium text-white/80'>Mod:</span> {item.moderation}
-                                        </p>
+                                        {isVideo ? (
+                                            <>
+                                                <p>
+                                                    <span className='font-medium text-white/80'>Resolution:</span>{' '}
+                                                    {item.videoSize}
+                                                </p>
+                                                <p>
+                                                    <span className='font-medium text-white/80'>Duration:</span>{' '}
+                                                    {item.videoSeconds ? `${item.videoSeconds}s` : '—'}
+                                                </p>
+                                            </>
+                                        ) : (
+                                            <>
+                                                    <p>
+                                                        <span className='font-medium text-white/80'>Quality:</span> {item.quality}
+                                                    </p>
+                                                    <p>
+                                                        <span className='font-medium text-white/80'>BG:</span> {item.background}
+                                                    </p>
+                                                    <p>
+                                                        <span className='font-medium text-white/80'>Mod:</span> {item.moderation}
+                                                    </p>
+                                            </>
+                                        )}
                                         <div className='mt-2 flex items-center gap-1'>
                                             <Dialog
                                                 open={openPromptDialogTimestamp === itemKey}
@@ -411,6 +479,19 @@ export function HistoryPanel({
                                                         {item.prompt || 'No prompt recorded.'}
                                                     </div>
                                                     <DialogFooter>
+                                                        <Button
+                                                            variant='outline'
+                                                            size='sm'
+                                                            onClick={() => {
+                                                                if (item.prompt) {
+                                                                    onReusePrompt(item.prompt, item.mode);
+                                                                    setOpenPromptDialogTimestamp(null);
+                                                                }
+                                                            }}
+                                                            className='border-neutral-600 text-neutral-300 hover:bg-neutral-700 hover:text-white'>
+                                                            <ArrowUpRight className='mr-2 h-4 w-4' />
+                                                            Use Prompt
+                                                        </Button>
                                                         <Button
                                                             variant='outline'
                                                             size='sm'
@@ -458,7 +539,7 @@ export function HistoryPanel({
                                                         </DialogTitle>
                                                         <DialogDescription className='pt-2 text-neutral-300'>
                                                             Are you sure you want to delete this history entry? This
-                                                            will remove {item.images.length} image(s). This action
+                                                            will remove {mediaCount} item(s). This action
                                                             cannot be undone.
                                                         </DialogDescription>
                                                     </DialogHeader>
