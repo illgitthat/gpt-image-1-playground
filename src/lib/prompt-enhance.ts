@@ -1,4 +1,4 @@
-import type { ChatCompletionContentPart, ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import type OpenAI from 'openai';
 
 const generateSystemPrompt = `You are an expert prompt engineer for a general-purpose text-to-image model. Rewrite the user's request into a single, highly effective prompt that works across many use cases (photorealism, illustration, logos, UI mockups, infographics, product shots, style transfer).
 
@@ -44,8 +44,7 @@ Rules:
 - If text appears on screen, include it in "QUOTES" with typography notes (font style, placement, size, contrast).
 - If dialogue is present, place it in a separate Dialogue: block with concise, natural lines. Label speakers consistently. 4-second clips support 1-2 short exchanges.
 - Do not invent new objects or characters not in the reference; stay faithful to the composition.
-- Length target: 80-120 words for detailed control; shorter for simple motions.
-`;
+- Length target: 80-120 words for detailed control; shorter for simple motions.`;
 
 const videoPromptOnlySystemPrompt = `You are an expert prompt engineer for prompt-to-video generation (Sora 2) with no reference image. Rewrite the user's request into a detailed, visual directive that establishes scene, motion, and camera with precision.
 
@@ -65,8 +64,7 @@ Rules:
 - If text appears on screen, include it in "QUOTES" with typography notes (font style, placement, size, contrast).
 - Shorter clips (4s) follow instructions better than longer ones; note if the user implies duration.
 - Do not invent factual details the user did not imply; stay faithful to their intent.
-- Length target: 80-120 words for detailed control.
-`;
+- Length target: 80-120 words for detailed control.`;
 
 export type PromptEnhanceImagePayload = {
     dataUrl: string;
@@ -78,12 +76,20 @@ export type BuildPromptEnhanceOptions = {
     videoHasReferenceImage?: boolean;
 };
 
-export function buildPromptEnhanceMessages(
+type ResponseInputContent = OpenAI.Responses.ResponseInputContent;
+type ResponseInputItem = OpenAI.Responses.ResponseInputItem;
+
+export type PromptEnhanceParams = {
+    instructions: string;
+    input: string | ResponseInputItem[];
+};
+
+export function buildPromptEnhanceInput(
     mode: 'generate' | 'edit' | 'video',
     prompt: string,
     options?: BuildPromptEnhanceOptions
-): ChatCompletionMessageParam[] {
-    const systemPrompt =
+): PromptEnhanceParams {
+    const instructions =
         mode === 'edit'
             ? editSystemPrompt
             : mode === 'video'
@@ -94,35 +100,28 @@ export function buildPromptEnhanceMessages(
 
     const hasReferenceImages = Array.isArray(options?.referenceImages) && options?.referenceImages.length > 0;
 
-    const userContent: ChatCompletionContentPart[] | string = hasReferenceImages
-        ? options!.referenceImages!.reduce<ChatCompletionContentPart[]>(
-            (acc, img, index) => {
-                if (index === 0) {
-                    acc.push({ type: 'text', text: prompt });
-                }
+    // Simple string input when no reference images
+    if (!hasReferenceImages) {
+        return { instructions, input: prompt };
+    }
 
-                if (img.alt) {
-                    acc.push({ type: 'text', text: `Reference image ${index + 1}: ${img.alt}` });
-                }
+    // Multi-modal input with images
+    const content: ResponseInputContent[] = [];
 
-                acc.push({
-                    type: 'image_url',
-                    image_url: {
-                        url: img.dataUrl,
-                        detail: 'low'
-                    }
-                });
+    options!.referenceImages!.forEach((img, index) => {
+        if (img.alt) {
+            content.push({ type: 'input_text', text: `Reference image ${index + 1}: ${img.alt}` });
+        }
+        content.push({
+            type: 'input_image',
+            image_url: img.dataUrl,
+            detail: 'low'
+        });
+    });
 
-                return acc;
-            },
-            []
-        )
-        : prompt;
+    content.push({ type: 'input_text', text: prompt });
 
-    return [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userContent }
-    ];
+    return { instructions, input: [{ role: 'user', content }] };
 }
 
 export const promptEnhanceTemplates = {

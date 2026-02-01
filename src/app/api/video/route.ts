@@ -6,10 +6,9 @@ import sharp from 'sharp';
 
 const outputDir = path.resolve(process.cwd(), 'generated-images');
 
-const azureConfig = {
-    apiKey: process.env.AZURE_OPENAI_API_KEY,
-    endpoint: process.env.AZURE_OPENAI_ENDPOINT,
-    apiVersion: process.env.AZURE_OPENAI_API_VERSION
+const config = {
+    apiKey: process.env.AZURE_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+    baseURL: process.env.AZURE_OPENAI_ENDPOINT || process.env.OPENAI_API_BASE_URL
 };
 
 const soraModel = process.env.AZURE_OPENAI_SORA_MODEL || 'sora-2';
@@ -42,24 +41,22 @@ async function ensureOutputDirExists() {
     }
 }
 
-function getAzureBaseUrl(): string {
-    const endpoint = azureConfig.endpoint?.replace(/\/$/, '');
+function getBaseUrl(): string {
+    const endpoint = config.baseURL?.replace(/\/$/, '');
     if (!endpoint) {
-        throw new Error('Azure endpoint is not configured.');
+        throw new Error('API endpoint is not configured.');
     }
-    return `${endpoint}/openai/v1`;
+    return endpoint;
 }
 
 async function fetchVideoStatus(jobId: string) {
-    const baseUrl = getAzureBaseUrl();
-    // Sora endpoints require the "preview" api-version regardless of other Azure image/chat versions
-    const apiVersion = 'preview';
-    const statusUrl = `${baseUrl}/videos/${jobId}?api-version=${apiVersion}`;
+    const baseUrl = getBaseUrl();
+    const statusUrl = `${baseUrl}/videos/${jobId}`;
 
     const statusResp = await fetch(statusUrl, {
         method: 'GET',
         headers: {
-            'api-key': azureConfig.apiKey || ''
+            'api-key': config.apiKey || ''
         }
     });
 
@@ -71,12 +68,12 @@ async function fetchVideoStatus(jobId: string) {
     return statusResp.json();
 }
 
-async function downloadVideo(jobId: string, apiVersion: string, baseUrl: string) {
-    const downloadUrl = `${baseUrl}/videos/${jobId}/content?api-version=${apiVersion}&variant=video`;
+async function downloadVideo(jobId: string, baseUrl: string) {
+    const downloadUrl = `${baseUrl}/videos/${jobId}/content?variant=video`;
     const downloadResp = await fetch(downloadUrl, {
         method: 'GET',
         headers: {
-            'api-key': azureConfig.apiKey || '',
+            'api-key': config.apiKey || '',
             Accept: 'application/octet-stream'
         }
     });
@@ -99,9 +96,9 @@ async function downloadVideo(jobId: string, apiVersion: string, baseUrl: string)
 }
 
 export async function POST(request: NextRequest) {
-    if (!azureConfig.apiKey || !azureConfig.endpoint) {
-        console.error('Azure OpenAI credentials are missing for Sora video generation.');
-        return NextResponse.json({ error: 'Server configuration error: Azure OpenAI credentials are incomplete.' }, { status: 500 });
+    if (!config.apiKey || !config.baseURL) {
+        console.error('API credentials are missing for Sora video generation.');
+        return NextResponse.json({ error: 'Server configuration error: API credentials are incomplete.' }, { status: 500 });
     }
 
     try {
@@ -142,9 +139,8 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid reference image payload.' }, { status: 400 });
         }
 
-        const baseUrl = getAzureBaseUrl();
-        const apiVersion = 'preview';
-        const createUrl = `${baseUrl}/videos?api-version=${apiVersion}`;
+        const baseUrl = getBaseUrl();
+        const createUrl = `${baseUrl}/videos`;
 
         const { width, height } = parseSize(size);
         let resizedFile: File | null = null;
@@ -173,16 +169,16 @@ export async function POST(request: NextRequest) {
         const createResp = await fetch(createUrl, {
             method: 'POST',
             headers: {
-                'api-key': azureConfig.apiKey || ''
+                'api-key': config.apiKey || ''
             },
             body: requestForm
         });
 
         if (!createResp.ok) {
             const errorData = await createResp.text().catch(() => '');
-            console.error('Azure create video error:', errorData);
+            console.error('Video creation error:', errorData);
             return NextResponse.json(
-                { error: `Azure video creation failed: ${createResp.status} ${createResp.statusText}` },
+                { error: `Video creation failed: ${createResp.status} ${createResp.statusText}` },
                 { status: createResp.status }
             );
         }
@@ -206,9 +202,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-    if (!azureConfig.apiKey || !azureConfig.endpoint) {
-        console.error('Azure OpenAI credentials are missing for Sora video polling.');
-        return NextResponse.json({ error: 'Server configuration error: Azure OpenAI credentials are incomplete.' }, { status: 500 });
+    if (!config.apiKey || !config.baseURL) {
+        console.error('API credentials are missing for Sora video polling.');
+        return NextResponse.json({ error: 'Server configuration error: API credentials are incomplete.' }, { status: 500 });
     }
 
     const jobId = request.nextUrl.searchParams.get('jobId');
@@ -218,8 +214,7 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        const baseUrl = getAzureBaseUrl();
-        const apiVersion = 'preview';
+        const baseUrl = getBaseUrl();
 
         const statusJson = await fetchVideoStatus(jobId);
         const status = (statusJson.status as string | undefined)?.toLowerCase();
@@ -243,7 +238,7 @@ export async function GET(request: NextRequest) {
                 }
 
                 if (!alreadyExists) {
-                    await downloadVideo(jobId, apiVersion, baseUrl);
+                    await downloadVideo(jobId, baseUrl);
                 }
 
                 return NextResponse.json({

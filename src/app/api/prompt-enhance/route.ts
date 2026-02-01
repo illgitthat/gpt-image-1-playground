@@ -1,47 +1,22 @@
 import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI, { AzureOpenAI } from 'openai';
-import { buildPromptEnhanceMessages, type PromptEnhanceImagePayload } from '@/lib/prompt-enhance';
+import OpenAI from 'openai';
+import { buildPromptEnhanceInput, type PromptEnhanceImagePayload } from '@/lib/prompt-enhance';
 
-const azureConfig = {
-    apiKey: process.env.AZURE_OPENAI_API_KEY,
-    endpoint: process.env.AZURE_OPENAI_ENDPOINT,
-    apiVersion: process.env.AZURE_OPENAI_API_VERSION,
-    deployment: process.env.AZURE_OPENAI_DEPLOYMENT_NAME,
+const config = {
+    apiKey: process.env.AZURE_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+    baseURL: process.env.AZURE_OPENAI_ENDPOINT || process.env.OPENAI_API_BASE_URL,
     enhanceDeployment: process.env.AZURE_OPENAI_PROMPT_ENHANCE_DEPLOYMENT_NAME
 };
 
 const promptEnhanceModel = process.env.PROMPT_ENHANCE_MODEL || 'gpt-5.2-chat';
+const useCustomEndpoint = Boolean(process.env.AZURE_OPENAI_ENDPOINT);
 
-// Fall back: AZURE_OPENAI_PROMPT_ENHANCE_DEPLOYMENT_NAME -> PROMPT_ENHANCE_MODEL (assumes deployment name matches model)
-const azureDeploymentForEnhance = azureConfig.enhanceDeployment || promptEnhanceModel;
-const useAzure = Boolean(
-    azureConfig.apiKey && azureConfig.endpoint && azureConfig.apiVersion && azureDeploymentForEnhance
-);
+// Fall back: AZURE_OPENAI_PROMPT_ENHANCE_DEPLOYMENT_NAME -> PROMPT_ENHANCE_MODEL
+const modelToUse = config.enhanceDeployment || promptEnhanceModel;
 
 function sha256(data: string): string {
     return crypto.createHash('sha256').update(data).digest('hex');
-}
-
-function extractText(content: unknown): string {
-    if (typeof content === 'string') {
-        return content.trim();
-    }
-
-    if (Array.isArray(content)) {
-        return content
-            .map((part) => {
-                if (typeof part === 'string') return part;
-                if (part && typeof part === 'object' && 'text' in part && typeof (part as { text?: string }).text === 'string') {
-                    return (part as { text?: string }).text ?? '';
-                }
-                return '';
-            })
-            .join('')
-            .trim();
-    }
-
-    return '';
 }
 
 function sanitizeReferenceImages(input: unknown): PromptEnhanceImagePayload[] {
@@ -78,14 +53,7 @@ function sanitizeReferenceImages(input: unknown): PromptEnhanceImagePayload[] {
 }
 
 export async function POST(request: NextRequest) {
-    if (useAzure) {
-        if (!azureConfig.apiKey || !azureConfig.endpoint || !azureConfig.apiVersion || !azureDeploymentForEnhance) {
-            return NextResponse.json(
-                { error: 'Server configuration error: Azure OpenAI credentials are incomplete.' },
-                { status: 500 }
-            );
-        }
-    } else if (!process.env.OPENAI_API_KEY) {
+    if (!config.apiKey) {
         return NextResponse.json({ error: 'Server configuration error: API key not found.' }, { status: 500 });
     }
 
@@ -111,32 +79,24 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        const messages = buildPromptEnhanceMessages(mode, prompt, {
+        const { instructions, input } = buildPromptEnhanceInput(mode, prompt, {
             referenceImages,
             videoHasReferenceImage
         });
-        const modelToUse = useAzure ? azureDeploymentForEnhance! : promptEnhanceModel;
 
-        const apiClient = useAzure
-            ? new AzureOpenAI({
-                apiKey: azureConfig.apiKey!,
-                endpoint: azureConfig.endpoint!,
-                apiVersion: azureConfig.apiVersion!,
-                deployment: azureDeploymentForEnhance!
-            })
-            : new OpenAI({
-                apiKey: process.env.OPENAI_API_KEY,
-                baseURL: process.env.OPENAI_API_BASE_URL
-            });
-
-        const completion = await apiClient.chat.completions.create({
-            model: modelToUse,
-            messages,
-            max_completion_tokens: 320
+        const apiClient = new OpenAI({
+            apiKey: config.apiKey,
+            baseURL: config.baseURL,
+            defaultHeaders: useCustomEndpoint ? { 'api-key': config.apiKey! } : undefined
         });
 
-        const message = completion.choices?.[0]?.message;
-        const enhanced = message ? extractText(message.content) : '';
+        const response = await apiClient.responses.create({
+            model: modelToUse,
+            instructions,
+            input
+        });
+
+        const enhanced = response.output_text?.trim() || '';
 
         if (!enhanced) {
             return NextResponse.json({ error: 'Failed to enhance prompt.' }, { status: 502 });
