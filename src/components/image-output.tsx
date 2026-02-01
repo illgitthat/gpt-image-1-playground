@@ -269,6 +269,7 @@ export function ImageOutput({
                         <Send className='mr-2 h-4 w-4' />
                         Send to Edit
                     </Button>
+                    {/* Send to Video button hidden - feature temporarily disabled
                     {onSendToVideo && (
                         <Button
                             variant='outline'
@@ -283,6 +284,7 @@ export function ImageOutput({
                             Send to Video
                         </Button>
                     )}
+                    */}
                 </div>
             </div>
         </div>

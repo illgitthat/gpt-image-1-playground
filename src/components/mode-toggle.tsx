@@ -10,7 +10,7 @@ type ModeToggleProps = {
 export function ModeToggle({ currentMode, onModeChange }: ModeToggleProps) {
     return (
         <Tabs value={currentMode} onValueChange={(value) => onModeChange(value as ModeToggleProps['currentMode'])} className='w-auto'>
-            <TabsList className='grid h-auto grid-cols-3 gap-1 rounded-md border-none bg-transparent p-0'>
+            <TabsList className='grid h-auto grid-cols-2 gap-1 rounded-md border-none bg-transparent p-0'>
                 <TabsTrigger
                     value='generate'
                     className={`rounded-md border px-3 py-1 text-sm transition-colors ${
@@ -29,6 +29,7 @@ export function ModeToggle({ currentMode, onModeChange }: ModeToggleProps) {
                     } `}>
                     Edit
                 </TabsTrigger>
+                {/* Video tab hidden - feature temporarily disabled
                 <TabsTrigger
                     value='video'
                     className={`rounded-md border px-3 py-1 text-sm transition-colors ${currentMode === 'video'
@@ -37,6 +38,7 @@ export function ModeToggle({ currentMode, onModeChange }: ModeToggleProps) {
                         } `}>
                     Video
                 </TabsTrigger>
+                */}
             </TabsList>
         </Tabs>
     );

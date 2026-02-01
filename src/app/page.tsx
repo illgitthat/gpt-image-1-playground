@@ -1412,6 +1412,7 @@ export default function HomePage() {
                                 enhanceError={editPromptEnhanceError}
                             />
                         </div>
+                        {/* VideoForm hidden - feature temporarily disabled
                         <div className={mode === 'video' ? 'block h-full w-full' : 'hidden'}>
                             <VideoForm
                                 onSubmit={handleVideoSubmit}
@@ -1436,6 +1437,7 @@ export default function HomePage() {
                                 enhanceError={videoPromptEnhanceError}
                             />
                         </div>
+                        */}
                     </div>
                     <div className='flex h-[70vh] min-h-[600px] flex-col lg:col-span-1'>
                         {error && (
@@ -1444,6 +1446,7 @@ export default function HomePage() {
                                 <AlertDescription>{error}</AlertDescription>
                             </Alert>
                         )}
+                        {/* VideoOutput hidden - feature temporarily disabled
                         {mode === 'video' ? (
                             <VideoOutput
                                 videoBatch={latestVideoBatch}
@@ -1453,6 +1456,7 @@ export default function HomePage() {
                                 elapsedSeconds={videoElapsedSeconds}
                             />
                         ) : (
+                        */}
                                 <ImageOutput
                                     imageBatch={latestImageBatch}
                                     viewMode={imageOutputView}
@@ -1463,9 +1467,9 @@ export default function HomePage() {
                                     currentMode={mode}
                                     baseImagePreviewUrl={editSourceImagePreviewUrls[0] || null}
                                     streamingPreviewImages={streamingPreviewImages}
-                                    onSendToVideo={handleSendToVideo}
+                                    // onSendToVideo={handleSendToVideo} // Disabled - video feature temporarily hidden
                                 />
-                        )}
+                        {/* )} */}
                     </div>
                 </div>
 
