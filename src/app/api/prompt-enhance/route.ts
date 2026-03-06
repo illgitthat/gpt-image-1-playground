@@ -9,7 +9,7 @@ const config = {
     enhanceDeployment: process.env.AZURE_OPENAI_PROMPT_ENHANCE_DEPLOYMENT_NAME
 };
 
-const promptEnhanceModel = process.env.PROMPT_ENHANCE_MODEL || 'gpt-5.2-chat';
+const promptEnhanceModel = process.env.PROMPT_ENHANCE_MODEL || 'gpt-5.3-chat';
 const useCustomEndpoint = Boolean(process.env.AZURE_OPENAI_ENDPOINT);
 
 // Fall back: AZURE_OPENAI_PROMPT_ENHANCE_DEPLOYMENT_NAME -> PROMPT_ENHANCE_MODEL

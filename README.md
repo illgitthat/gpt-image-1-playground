@@ -72,7 +72,7 @@ Then open [http://localhost:3000](http://localhost:3000) 🎉
 *   **🖼️ Flexible Image Output View:** View generated image batches as a grid or select individual images for a closer look.
 *   **🚀 Send to Edit:** Quickly send any generated or history image directly to the editing form.
 *   **📋 Paste to Edit:** Paste images directly from your clipboard into the Edit mode's source image area.
-*   **✨ Prompt Auto-Enhance:** Refine generate and edit prompts with GPT-5.2 Chat before sending them to the image API.
+*   **✨ Prompt Auto-Enhance:** Refine generate and edit prompts with GPT-5.3 Chat before sending them to the image API.
 *   **💾 Storage:** Supports two modes via `NEXT_PUBLIC_IMAGE_STORAGE_MODE`:
     *   **Filesystem (default):** Images saved to `./generated-images` on the server.
     *   **IndexedDB:** Images saved directly in the browser's IndexedDB (ideal for serverless deployments).
@@ -155,8 +155,8 @@ NEXT_PUBLIC_IMAGE_STORAGE_MODE=indexeddb
 Auto-polish prompts with a chat model before calling the image API:
 
 ```dotenv
-# Override the chat model (default: gpt-5.2-chat)
-PROMPT_ENHANCE_MODEL=gpt-5.2-chat
+# Override the chat model (default: gpt-5.3-chat)
+PROMPT_ENHANCE_MODEL=gpt-5.3-chat
 
 # For Azure, specify a chat deployment
 AZURE_OPENAI_PROMPT_ENHANCE_DEPLOYMENT_NAME=your_chat_deployment

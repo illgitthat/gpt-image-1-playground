@@ -284,7 +284,7 @@ export function GenerationForm({
                                         </Button>
                                     </TooltipTrigger>
                                     <TooltipContent className='bg-black text-white'>
-                                        Refine the prompt with GPT-5.2 Chat.
+                                        Refine the prompt with GPT-5.3 Chat.
                                     </TooltipContent>
                                 </Tooltip>
                             </div>

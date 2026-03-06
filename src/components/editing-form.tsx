@@ -674,7 +674,7 @@ export function EditingForm({
                                         </Button>
                                     </TooltipTrigger>
                                     <TooltipContent className='bg-black text-white'>
-                                        Refine the edit prompt with GPT-5.2 Chat.
+                                        Refine the edit prompt with GPT-5.3 Chat.
                                     </TooltipContent>
                                 </Tooltip>
                             </div>

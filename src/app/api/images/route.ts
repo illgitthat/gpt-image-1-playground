@@ -199,7 +199,7 @@ export async function POST(request: NextRequest) {
         async start(controller) {
           try {
             const response = await apiClient.responses.create({
-              model: 'gpt-5.2-chat',
+              model: 'gpt-5.3-chat',
               input: inputContent,
               tools: [imageGenTool],
               stream: true
@@ -303,7 +303,7 @@ export async function POST(request: NextRequest) {
     // Generate n images (Responses API generates one at a time)
     for (let i = 0; i < Math.min(n, 10); i++) {
       const response = await apiClient.responses.create({
-        model: 'gpt-5.2-chat',
+        model: 'gpt-5.3-chat',
         input: inputContent,
         tools: [imageGenTool]
       });

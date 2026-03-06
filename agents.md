@@ -30,7 +30,7 @@ Key points:
 AZURE_OPENAI_ENDPOINT=https://...y/openai/v1
 AZURE_OPENAI_API_KEY=<your-key>
 AZURE_OPENAI_DEPLOYMENT_NAME=gpt-image-1.5
-PROMPT_ENHANCE_MODEL=gpt-5.2-chat  # Optional, for prompt enhancement
+PROMPT_ENHANCE_MODEL=gpt-5.3-chat  # Optional, for prompt enhancement
 ```
 
 **Warning**: System environment variables can override `.env.local`. If you have `AZURE_OPENAI_ENDPOINT` set system-wide, it may conflict.
@@ -43,7 +43,7 @@ All text generation uses the Responses API, NOT chat completions.
 
 ```typescript
 const response = await client.responses.create({
-    model: 'gpt-5.2-chat',
+    model: 'gpt-5.3-chat',
     instructions: 'System prompt goes here',  // NOT in input array
     input: 'User message here',  // Can be string or ResponseInputItem[]
 });
@@ -96,7 +96,7 @@ const apiClient = new OpenAI({
 
 ```typescript
 const response = await apiClient.responses.create({
-    model: 'gpt-5.2-chat',  // Chat model orchestrates image generation
+    model: 'gpt-5.3-chat',  // Chat model orchestrates image generation
     input: [{
         role: 'user',
         content: 'A beautiful sunset over mountains'
@@ -109,7 +109,7 @@ const response = await apiClient.responses.create({
 
 ```typescript
 const response = await apiClient.responses.create({
-    model: 'gpt-5.2-chat',
+    model: 'gpt-5.3-chat',
     input: [{ role: 'user', content: prompt }],
     tools: [{
         type: 'image_generation',
@@ -139,7 +139,7 @@ images.forEach((img, i) => {
 inputContent.push({ type: 'input_text', text: editPrompt });
 
 const response = await apiClient.responses.create({
-    model: 'gpt-5.2-chat',
+    model: 'gpt-5.3-chat',
     input: [{ role: 'user', content: inputContent }],
     tools: [{ type: 'image_generation', ...params }],
 });
@@ -162,11 +162,11 @@ const dataUrl = `data:image/png;base64,${generatedImages[0]}`;
 
 ### Streaming Image Generation
 
-Streaming uses the Responses API with `stream: true`. The model must be a chat model (e.g., `gpt-5.2-chat`), NOT the image model directly.
+Streaming uses the Responses API with `stream: true`. The model must be a chat model (e.g., `gpt-5.3-chat`), NOT the image model directly.
 
 ```typescript
 const response = await apiClient.responses.create({
-    model: 'gpt-5.2-chat',  // Chat model orchestrates image generation
+    model: 'gpt-5.3-chat',  // Chat model orchestrates image generation
     input: [{ role: 'user', content: prompt }],
     tools: [{
         type: 'image_generation',
